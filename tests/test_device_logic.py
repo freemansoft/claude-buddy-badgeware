@@ -247,9 +247,11 @@ class WrapTest(unittest.TestCase):
             bars = self.frame_bars()
             # Four sides plus the rule under the title.
             self.assertEqual(len(bars), 5, title)
-            # Each bar is FRAME_W thick, inside the screen and dividers.
+            # Four FRAME_W sides and one TITLE_RULE_W rule.
+            widths = sorted(min(w, h) for _, _, w, h in bars)
+            self.assertEqual(widths, sorted([buddy_view.FRAME_W] * 4
+                                            + [buddy_view.TITLE_RULE_W]), title)
             for x, y, w, h in bars:
-                self.assertEqual(min(w, h), buddy_view.FRAME_W, title)
                 # Inset from the edges and dividers, with space round it.
                 self.assertGreaterEqual(x, buddy_view.FRAME_MARGIN_X)
                 self.assertLessEqual(x + w, 264 - buddy_view.FRAME_MARGIN_X)
@@ -297,7 +299,7 @@ class WrapTest(unittest.TestCase):
         horizontal = [r for r in sides if r[2] > r[3]]
         self.assertEqual(len(horizontal), 3)
         rule = horizontal[1]
-        self.assertEqual(rule[3], buddy_view.FRAME_W)
+        self.assertEqual(rule[3], buddy_view.TITLE_RULE_W)
         _, iy = pos["In Claude Desktop: Developer > Open"]
         self.assertGreater(rule[1], ty + self.view.h_title - 1)
         self.assertLess(rule[1] + rule[3], iy)

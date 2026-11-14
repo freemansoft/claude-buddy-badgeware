@@ -51,8 +51,9 @@ FRAME_MARGIN_X = 16  # space between the screen edge and the frame
 FRAME_MARGIN_Y = 10  # space between the dividers and the frame
 FRAME_W = 3  # frame thickness
 FRAME_GAP = 4  # space between the frame and the text
-# Inside the frame the title is centred, with a FRAME_W-thick rule
-# across the frame between it and the instructions, FRAME_GAP each side.
+# Inside the frame the title is centred, with a rule across the frame
+# between it and the instructions, FRAME_GAP each side.
+TITLE_RULE_W = 2  # thickness of that rule
 BAR_FONT = "nope"
 TITLE_FONT = "absolute"
 BODY_FONT = "nope"
@@ -272,7 +273,7 @@ class BuddyView:
     def _draw_title_rule(self, y):
         """The rule under a framed title, joining the frame's sides."""
         x = FRAME_MARGIN_X
-        screen.rectangle(x, y, self.w - 2 * x, FRAME_W)
+        screen.rectangle(x, y, self.w - 2 * x, TITLE_RULE_W)
 
     def _draw_header(self, name, status, battery):
         """Device identifier (left), battery, link status (right).
@@ -360,7 +361,7 @@ class BuddyView:
         if title_lines:
             top += len(title_lines) * self.h_title
             if area is self.framed_area:
-                top += FRAME_GAP + FRAME_W + FRAME_GAP  # the title rule
+                top += FRAME_GAP + TITLE_RULE_W + FRAME_GAP  # the title rule
             else:
                 top += LINE_GAP * 2
 
