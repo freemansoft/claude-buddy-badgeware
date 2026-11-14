@@ -118,9 +118,10 @@ right of the bottom row:
     and after Claude Desktop disconnects (`Disconnected`), the content
     area shows the pairing instructions inside a thick black frame, set
     in from the screen edges and dividers with blank space round it.
-    The frame appears only on these screens, so at a glance the badge
-    isn't showing Claude's data. It's drawn as part of the refresh the
-    connection change already causes, so it costs no extra refresh.
+    The title is centred, with a rule under it. The frame appears only
+    on these screens, so at a glance the badge isn't showing Claude's
+    data. It's drawn as part of the refresh the connection change
+    already causes, so it costs no extra refresh.
 
     ```text
     +------------------------------------------+
@@ -128,7 +129,8 @@ right of the bottom row:
     +------------------------------------------+
     |                                          |
     |    ##################################    |
-    |    # Disconnected                   #    |
+    |    #          Disconnected          #    |
+    |    ##################################    |
     |    # In Claude Desktop: Developer > #    |
     |    # Open Hardware Buddy... >       #    |
     |    # Connect                        #    |

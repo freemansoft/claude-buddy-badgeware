@@ -245,7 +245,8 @@ class WrapTest(unittest.TestCase):
             self.view.draw(make_scr(kind="pair", title=title, status="Not connected",
                                     lines=self.PAIR_LINES))
             bars = self.frame_bars()
-            self.assertEqual(len(bars), 4, title)
+            # Four sides plus the rule under the title.
+            self.assertEqual(len(bars), 5, title)
             # Each bar is FRAME_W thick, inside the screen and dividers.
             for x, y, w, h in bars:
                 self.assertEqual(min(w, h), buddy_view.FRAME_W, title)
@@ -280,6 +281,36 @@ class WrapTest(unittest.TestCase):
         # whole, with no word cut.
         joined = " ".join(t for t, _, _ in body)
         self.assertIn("Open Hardware", joined)
+
+    def test_framed_title_is_centred_above_a_rule(self):
+        self.view.draw(make_scr(kind="pair", title="Disconnected", status="Not connected",
+                                lines=self.PAIR_LINES))
+        x0, w, _, _ = self.view.framed_area
+        pos = {t: (x, y) for t, x, y in screen.drawn}
+        tx, ty = pos["Disconnected"]
+        tw = len("Disconnected") * CHAR_W
+        # Centred: equal space either side, to within a pixel.
+        self.assertLessEqual(abs((tx - x0) - (x0 + w - tx - tw)), 1)
+        # The rule is the one full-width horizontal bar that isn't the
+        # frame's top or bottom; it lies between title and instructions.
+        sides = sorted(self.frame_bars(), key=lambda r: r[1])
+        horizontal = [r for r in sides if r[2] > r[3]]
+        self.assertEqual(len(horizontal), 3)
+        rule = horizontal[1]
+        self.assertEqual(rule[3], buddy_view.FRAME_W)
+        _, iy = pos["In Claude Desktop: Developer > Open"]
+        self.assertGreater(rule[1], ty + self.view.h_title - 1)
+        self.assertLess(rule[1] + rule[3], iy)
+        # The instructions stay left-aligned.
+        self.assertEqual(pos["Pick Claude_A1B2C3"][0], x0)
+
+    def test_connected_titles_stay_left_aligned(self):
+        for scr in (make_scr(kind="status", title="Done"),
+                    make_scr(kind="prompt", title="Allow Bash?", lines=(("w", "ls"),))):
+            self.view.draw(scr)
+            x = {t: x for t, x, _ in screen.drawn}[scr[4]]
+            self.assertEqual(x, self.view.body_x, scr[4])
+
         # The smaller area still holds everything on one page, so there's
         # no page marker and nothing to page through.
         scr = make_scr(kind="pair", title="Pair with Claude", status="Not connected",

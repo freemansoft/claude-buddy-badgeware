@@ -51,6 +51,8 @@ FRAME_MARGIN_X = 16  # space between the screen edge and the frame
 FRAME_MARGIN_Y = 10  # space between the dividers and the frame
 FRAME_W = 3  # frame thickness
 FRAME_GAP = 4  # space between the frame and the text
+# Inside the frame the title is centred, with a FRAME_W-thick rule
+# across the frame between it and the instructions, FRAME_GAP each side.
 BAR_FONT = "nope"
 TITLE_FONT = "absolute"
 BODY_FONT = "nope"
@@ -267,6 +269,11 @@ class BuddyView:
         screen.rectangle(x, y, FRAME_W, h)  # left
         screen.rectangle(x + w - FRAME_W, y, FRAME_W, h)  # right
 
+    def _draw_title_rule(self, y):
+        """The rule under a framed title, joining the frame's sides."""
+        x = FRAME_MARGIN_X
+        screen.rectangle(x, y, self.w - 2 * x, FRAME_W)
+
     def _draw_header(self, name, status, battery):
         """Device identifier (left), battery, link status (right).
 
@@ -351,7 +358,11 @@ class BuddyView:
         title_lines = self.wrap(title, body_w, TITLE_MAX_LINES) if title else []
         top = body_top
         if title_lines:
-            top += len(title_lines) * self.h_title + LINE_GAP * 2
+            top += len(title_lines) * self.h_title
+            if area is self.framed_area:
+                top += FRAME_GAP + FRAME_W + FRAME_GAP  # the title rule
+            else:
+                top += LINE_GAP * 2
 
         screen.font = self.f_body
         rows = []
@@ -404,13 +415,19 @@ class BuddyView:
         screen.pen = self.theme.fg
         title_lines, top, pages, counts = self._layout(title, lines, area)
         page = max(0, min(page, len(pages) - 1))
-        body_x = area[0]
+        body_x, body_w = area[0], area[1]
+        framed = area is self.framed_area
 
         screen.font = self.f_title
         y = area[2]
         for line in title_lines:
-            self._text(line, body_x, y)
+            x = body_x
+            if framed:
+                x += (body_w - self._width(line)) // 2
+            self._text(line, x, y)
             y += self.h_title
+        if framed and title_lines:
+            self._draw_title_rule(y + FRAME_GAP)
 
         screen.font = self.f_body
         y = top
