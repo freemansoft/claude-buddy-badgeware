@@ -25,7 +25,8 @@ APP_DIR = "/system/apps/claude_buddy"
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
-from buddy_model import BuddyModel  # noqa: E402
+from buddy_lights import CaseLights  # noqa: E402
+from buddy_model import ATTENTION_KINDS, S_KIND, BuddyModel  # noqa: E402
 from buddy_painter import Painter  # noqa: E402
 from buddy_rxlog import RxLog  # noqa: E402
 from buddy_view import BuddyView  # noqa: E402
@@ -47,9 +48,13 @@ STARTUP_IGNORE_MS = 400
 # steps and it never causes a refresh by itself (except crossing into
 # low). USB plug/unplug is checked every loop and does refresh (~0.3 s).
 BATTERY_POLL_MS = 10000
-# Case-light blink acknowledging a button press, without an e-ink refresh.
+# Case lights (no e-ink refresh): one blink acknowledges A/B; while
+# Claude waits for an answer (on the badge or in the app) and USB power
+# is present, a double blink every WAITING_BLINK_REPEAT_MS.
 BLINK_MS = 150
 BLINK_LEVEL = 0.6
+WAITING_BLIP_MS = 120
+WAITING_BLINK_REPEAT_MS = 5000
 
 STATE_KEY = "claude_buddy"
 
@@ -157,15 +162,17 @@ rx_log = RxLog()
 if rx_log.enabled:
     print("claude_buddy: rx log ->", rx_log.path)
 
+lights = CaseLights(
+    _caselights,
+    level=BLINK_LEVEL,
+    ack_ms=BLINK_MS,
+    blip_ms=WAITING_BLIP_MS,
+    gap_ms=WAITING_BLIP_MS,
+    repeat_ms=WAITING_BLINK_REPEAT_MS,
+)
+
 _started_ms = time.ticks_ms()
-_blink_off_ms = None
 _next_battery_ms = _started_ms
-
-
-def _blink(now):
-    global _blink_off_ms
-    _caselights(BLINK_LEVEL)
-    _blink_off_ms = time.ticks_add(now, BLINK_MS)
 
 
 def _usb_present():
@@ -191,7 +198,6 @@ def _poll_battery(now):
 
 
 def update():
-    global _blink_off_ms
     badge.poll()
     now = time.ticks_ms()
     _poll_battery(now)
@@ -221,14 +227,13 @@ def update():
             if message is not None and ble.send(message):
                 rx_log.note(now, "TX", message)
                 model.record_decision(message)
-                _blink(now)
+                lights.ack(now)
                 painter.hold(now, ANSWER_SETTLE_MS)
 
-    if _blink_off_ms is not None and time.ticks_diff(now, _blink_off_ms) >= 0:
-        _caselights(0)
-        _blink_off_ms = None
-
     scr = model.screen(now)
+    # Waiting for an answer (badge prompt or "Answer in the Claude App"):
+    # double blink, but only on USB power.
+    lights.tick(now, scr[S_KIND] in ATTENTION_KINDS and model.on_usb)
     if badge.pressed(BUTTON_DOWN):
         painter.turn(scr, 1)
     elif badge.pressed(BUTTON_UP):
