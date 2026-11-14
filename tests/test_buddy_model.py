@@ -199,6 +199,64 @@ class ModelTest(unittest.TestCase):
         self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, id="req_2")), 200)
         self.assertEqual(self.answer(False, 200)["id"], "req_2")
 
+    # -- prompt ids: echoed exactly, or not answered on the badge --------
+
+    def test_spec_example_heartbeat_id_echoed_exactly(self):
+        # The heartbeat and decisions exactly as in REFERENCE.md.
+        spec_heartbeat = (
+            '{"total": 3, "running": 1, "waiting": 1, "msg": "approve: Bash",'
+            ' "entries": ["10:42 git push", "10:41 yarn test", "10:39 reading file..."],'
+            ' "tokens": 184502, "tokens_today": 31200,'
+            ' "prompt": {"id": "req_abc123", "tool": "Bash", "hint": "rm -rf /tmp/foo"}}'
+        )
+        self.connect()
+        self.model.handle_line(spec_heartbeat, 100)
+        self.assertTrue(self.model.screen(100)[bm.S_ACTIONABLE])
+        self.assertEqual(
+            json.dumps(self.answer(True, 100), separators=(",", ":")),
+            '{"cmd":"permission","id":"req_abc123","decision":"once"}',
+        )
+        self.assertEqual(
+            json.dumps(self.answer(False, 100), separators=(",", ":")),
+            '{"cmd":"permission","id":"req_abc123","decision":"deny"}',
+        )
+
+    def test_longest_allowed_id_echoed_exactly(self):
+        pid = "r" * bm.MAX_PROMPT_ID
+        self.connect()
+        self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, id=pid)), 100)
+        self.assertEqual(self.answer(True, 100)["id"], pid)
+
+    def assert_answer_in_app(self, bad_id):
+        self.connect()
+        self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, id=bad_id)), 100)
+        scr = self.model.screen(100)
+        # The prompt is still shown, with the header "Connected" (not
+        # "No data"), but A/B are hidden and do nothing.
+        self.assertEqual(scr[bm.S_KIND], bm.KIND_PROMPT)
+        self.assertEqual(scr[bm.S_TITLE], "Allow Bash?")
+        self.assertEqual(scr[bm.S_STATUS], "Connected")
+        self.assertFalse(scr[bm.S_ACTIONABLE])
+        self.assertIsNone(self.answer(True, 100))
+        self.assertIsNone(self.model.permission_message(False, 100, scr[bm.S_DOC]))
+
+    def test_too_long_id_is_answered_in_the_app(self):
+        # Cutting it would send back an id Desktop doesn't recognise.
+        self.assert_answer_in_app("r" * (bm.MAX_PROMPT_ID + 1))
+
+    def test_number_id_is_answered_in_the_app(self):
+        # Sending back "12345" for 12345 wouldn't match exactly.
+        self.assert_answer_in_app(12345)
+
+    def test_object_id_is_answered_in_the_app(self):
+        self.assert_answer_in_app({"n": 1})
+
+    def test_good_id_after_bad_one_is_answerable(self):
+        self.assert_answer_in_app(12345)
+        self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 200)
+        self.assertTrue(self.model.screen(200)[bm.S_ACTIONABLE])
+        self.assertEqual(self.answer(True, 200)["id"], "req_1")
+
     def test_stale_link_hides_accept_deny(self):
         self.connect(0)
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 1000)

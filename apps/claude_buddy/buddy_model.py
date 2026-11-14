@@ -41,6 +41,14 @@ MAX_PARAGRAPHS = 40
 MAX_ENTRY = 160
 MAX_ENTRIES = 8
 MAX_NAME = 32
+# A permission decision must echo prompt.id exactly, so the id is never
+# cut or converted. The spec gives no type or length for it, so this
+# follows Anthropic's reference firmware (claude-desktop-buddy
+# src/data.h, char promptId[40]): a string of at most 39 characters.
+# Any other id makes the prompt unanswerable on the badge ("Answer in
+# the Claude App"); the reference would cut or drop it silently. See
+# docs/protocol.md, "Prompt ids".
+MAX_PROMPT_ID = 39
 
 # Screen kinds. ``KIND_PROMPT`` and ``KIND_WAITING`` need the user
 # (``emphasis`` is True); the rest are status. The Badger draws all text
@@ -138,6 +146,14 @@ def _to_int(value, default=0):
     if isinstance(value, float):
         return int(value)
     return default
+
+
+def _echoable_id(value):
+    """``prompt.id`` if it can be sent back exactly, else None (shown,
+    but answered only in the app; see MAX_PROMPT_ID)."""
+    if isinstance(value, str) and 0 < len(value) <= MAX_PROMPT_ID:
+        return value
+    return None
 
 
 def _to_str(value, limit):
@@ -404,7 +420,7 @@ class BuddyModel:
         prompt = msg.get("prompt")
         if isinstance(prompt, dict) and prompt.get("id"):
             self.prompt = (
-                _to_str(prompt.get("id"), 128),
+                _echoable_id(prompt.get("id")),
                 _one_line(_to_str(prompt.get("tool"), MAX_NAME)) or "tool",
                 _to_str(prompt.get("hint"), MAX_HINT).strip(),
             )
@@ -533,18 +549,24 @@ class BuddyModel:
 
     def can_answer(self, now_ms):
         """True if the badge may answer the pending prompt: connected,
-        a prompt with an id, not yet answered, and the link not stale
-        (header "No data"), since Desktop has probably stopped listening."""
+        a prompt whose id can be echoed exactly (see MAX_PROMPT_ID), not
+        yet answered, and the link not stale (header "No data"), since
+        Desktop has probably stopped listening."""
         return (
             self.connected
             and self.prompt is not None
+            and self.prompt[0] is not None
             and not (self.answered and self.answered[0] == self.prompt[0])
             and not self.is_stale(now_ms)
         )
 
     def prompt_doc(self):
         """The S_DOC value of the pending prompt's screen, or None."""
-        return None if self.prompt is None else "p:" + self.prompt[0]
+        if self.prompt is None:
+            return None
+        # An id that can't be echoed is never answerable, so its doc only
+        # has to mark "a prompt" for paging.
+        return "p:" + (self.prompt[0] if self.prompt[0] is not None else "?")
 
     def permission_message(self, approve, now_ms, shown_doc):
         """The permission message for the pending prompt, or None.
@@ -714,8 +736,9 @@ class BuddyModel:
             lines = [(WRAP, part) for part in hint.split("\n") if part.strip()]
             if self.waiting > 1:
                 lines.append((SINGLE, "{} more waiting".format(self.waiting - 1)))
-            # Still shown when the link is stale ("No data"), but not
-            # answerable: the footer says to answer in the app instead.
+            # Still shown when the link is stale ("No data") or the id
+            # can't be echoed exactly, but not answerable: the footer
+            # says to answer in the app instead.
             actionable = self.can_answer(now_ms)
             return (name, status, KIND_PROMPT, True, "Allow " + tool + "?", tuple(lines), actionable)
 

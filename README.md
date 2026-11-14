@@ -133,8 +133,12 @@ right of the bottom row:
     a decision from you.
   - When Claude is waiting for an approval the badge **can't** answer,
     the A/B space says **`Answer in the Claude App`** instead. That
-    covers two cases:
+    covers three cases:
     - Desktop didn't send an answerable prompt;
+    - the prompt's id can't be sent back exactly (not a string of at
+      most 39 characters; see
+      [Prompt ids](docs/protocol.md#badge--desktop)). The prompt is
+      shown and the header still says `Connected`;
     - the header shows `No data` (no update for 30 s while still
       connected). Any prompt on screen stays visible, but A and B are
       hidden and the buttons do nothing, because Desktop has probably
