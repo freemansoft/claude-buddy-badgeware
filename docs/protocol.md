@@ -6,6 +6,38 @@ The authoritative spec is
 made where the spec leaves room. Code: `apps/claude_buddy/buddy_model.py`
 (messages) and `apps/claude_buddy/buddy_ble.py` (transport).
 
+## What Desktop sends, and what the badge shows
+
+Everything Claude Desktop sends over the link, from the reference and
+from the badge's receive log, and what the badge does with it.
+
+| Category | Item | What it is | On the badge |
+|---|---|---|---|
+| **Heartbeat** (every 70–200 ms in practice) | `prompt {id, tool, hint}` | A permission request the badge can answer | ✅ `Allow <tool>?` with the command (paged), and A/B |
+| | `waiting` | Sessions blocked on approval | ✅ count on the bottom row; triggers the "Answer in the Claude App" screen, `N more waiting` and `N sessions waiting` |
+| | `running` | Sessions actively generating | ✅ count on the bottom row |
+| | `total` | All open sessions | ⚙️ not shown as a number; 0 shows the "No sessions" screen, and it decides whether the waiting tool is shown |
+| | `msg` | Desktop's one-line summary, e.g. `approve: Bash`, `(called Bash)` | ✅ title of the status and waiting screens |
+| | `entries` | Recent transcript lines, newest first | ✅ one line each, after the reply (usually a later page) |
+| | `tokens_today` | Output tokens since local midnight | ✅ `31k today` on the bottom row |
+| | `tokens` | Output tokens since Desktop started | ❌ ignored |
+| | `completed` | "Turn finished" flag (read by the reference firmware, not in REFERENCE.md) | ❌ ignored; not yet seen in the receive log |
+| **Turn events** (one per message, sent at once; over 4 KB dropped by Desktop) | assistant `text` | What Claude writes | ✅ `Claude: …` reply: markdown stripped, capped at 3,000 characters, paged |
+| | assistant `tool_use` | Tool name and input (the full command) | ⚙️ only on the "Answer in the Claude App" screen, with one session open and when `msg` names the tool |
+| | assistant `thinking` | Thinking blocks (empty text in the log) | ❌ ignored |
+| | user messages | What you type | ❌ ignored |
+| | `tool_result` | Tool output | ❌ ignored |
+| **One-shot** | `time [epoch, tz_offset]` | Clock sync on connect | ❌ ignored (roadmap: "updated HH:MM") |
+| **Commands** (each acked) | `status` | Polled about every 2 s for Desktop's stats panel | ↩️ answered (battery, uptime, approve/deny counts), not displayed |
+| | `name` | Desktop's name for the buddy | ↩️ saved and reported back; the header keeps the BLE name so it matches the picker |
+| | `owner` | The user's name | ❌ saved, never shown |
+| | `unpair` | Erase bonds | ↩️ acked; nothing to erase (this firmware can't bond) |
+| | `char_begin` / `file` / `chunk` / `file_end` / `char_end` | Folder push (images, config) | ❌ refused (`ok:false`) |
+
+✅ shown · ⚙️ chooses the screen, not shown itself · ↩️ answered, not shown · ❌ not used
+
+The details of each message are in the sections below.
+
 ## Transport
 
 Nordic UART Service. Each message is one UTF-8 JSON object terminated

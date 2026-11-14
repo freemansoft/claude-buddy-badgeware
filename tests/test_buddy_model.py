@@ -256,11 +256,15 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(self.model.screen(1000 + delay + 100)[bm.S_KIND], bm.KIND_STATUS)
 
     def test_brief_zero_total_keeps_status(self):
+        # 0 -> 1 -> 0: the delay restarts from the second zero, so the
+        # screen stays on status until a full delay after it.
+        delay = bm.NO_SESSIONS_DELAY_MS
         self.connect()
         self.model.handle_line(heartbeat(total=0, running=0), 100)
-        self.model.handle_line(heartbeat(total=1), 100 + bm.NO_SESSIONS_DELAY_MS - 1)
-        self.assertEqual(self.model.screen(100 + 10 * bm.NO_SESSIONS_DELAY_MS)[bm.S_KIND],
-                         bm.KIND_STATUS)
+        self.model.handle_line(heartbeat(total=1), 200)
+        self.model.handle_line(heartbeat(total=0, running=0), 300)
+        self.assertEqual(self.model.screen(300 + delay - 1)[bm.S_KIND], bm.KIND_STATUS)
+        self.assertEqual(self.model.screen(300 + delay)[bm.S_KIND], bm.KIND_NO_SESSIONS)
 
     def test_no_sessions_keeps_last_reply(self):
         self.connect()
@@ -280,8 +284,12 @@ class ModelTest(unittest.TestCase):
         self.model.handle_line(heartbeat(total=0, running=0), later)
         self.model.on_disconnect()
         self.connect(later)
-        self.model.handle_line(heartbeat(total=1), later + 10)
-        self.assertEqual(self.model.screen(later + 10)[bm.S_KIND], bm.KIND_STATUS)
+        # The old link's zero doesn't count: a fresh delay starts from
+        # the first zero on the new link.
+        self.model.handle_line(heartbeat(total=0, running=0), later + 10)
+        delay = bm.NO_SESSIONS_DELAY_MS
+        self.assertEqual(self.model.screen(later + 10 + delay - 1)[bm.S_KIND], bm.KIND_STATUS)
+        self.assertEqual(self.model.screen(later + 10 + delay)[bm.S_KIND], bm.KIND_NO_SESSIONS)
 
     def test_dead_link_after_timeout(self):
         self.connect(0)
@@ -356,6 +364,8 @@ class ModelTest(unittest.TestCase):
         (ack,) = self.model.handle_line(line({"cmd": "char_begin", "name": "bufo", "total": 10}), 0)
         self.assertEqual(ack["ack"], "char_begin")
         self.assertFalse(ack["ok"])
+        # Known but unsupported, not "unknown command".
+        self.assertEqual(ack["error"], "not supported")
 
     def test_unpair_acks(self):
         self.assertEqual(
@@ -588,9 +598,8 @@ class UrgencyTest(unittest.TestCase):
         self.model.handle_line(heartbeat(msg="a"), 5000)
         self.assertEqual(self.model.screen(5000), old)
 
-    def test_key_excludes_passengers(self):
-        scr = self.model.screen(0)
-        self.assertEqual(len(bm.screen_key(scr)), bm.KEY_LEN)
+    def test_no_screen_has_no_key(self):
+        # Before the first paint the painter compares against None.
         self.assertIsNone(bm.screen_key(None))
 
 

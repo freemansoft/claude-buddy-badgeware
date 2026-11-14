@@ -25,11 +25,20 @@ class FakeScreen:
         self.font = None
         self.pen = None
 
+    @staticmethod
+    def _check_escaped(text):
+        # Badgeware reads a lone "[" as the start of a glyph tag; the
+        # view must escape it as "[[" before measuring or drawing.
+        if "[" in text.replace("[[", ""):
+            raise AssertionError("unescaped markup: {!r}".format(text))
+
     def measure_text(self, text):
+        self._check_escaped(text)
         # "[[" is one literal "[" once markup is parsed.
         return (len(text.replace("[[", "[")) * CHAR_W, 12)
 
     def text(self, text, x, y):
+        self._check_escaped(text)
         self.drawn.append((text, x, y))
 
     def clear(self):
@@ -213,10 +222,6 @@ class WrapTest(unittest.TestCase):
         (x,) = [x for t, x, _ in screen.drawn if t == "C: Exit"]
         self.assertGreaterEqual(x, 2 * (264 // 3))
 
-    def test_tokens_only_on_counts_line(self):
-        scr = make_scr(kind="prompt", lines=(("w", "ls"),), actionable=True, tokens="31k today")
-        self.assertFalse(any("31k" in t for t in self.draw_texts(scr)))
-
     def test_charging_label_fits_header(self):
         for status in ("Connected", "Not connected", "No data"):
             texts = self.draw_texts(make_scr(kind="pair", title="", status=status,
@@ -300,13 +305,26 @@ class PagingTest(unittest.TestCase):
             self.assertEqual(drawn[marker][1], self.bottom_y())
             for text, (_, y) in drawn.items():
                 if text.startswith("word") or text.startswith("Claude:"):
-                    self.assertLess(y, self.bottom_y())  # body stays above
+                    # Whole row above the counts row, not just its top.
+                    self.assertLessEqual(y + self.view.h_body, self.bottom_y() - 1, text)
 
     def test_counts_reserved_even_on_one_page(self):
-        scr = make_scr(lines=(("c", "0 running, 0 waiting"),))
-        drawn = self.drawn_at(scr, 0)
+        # Exactly as many entries as fill one page when nothing reserves
+        # the bottom row (a screen without counts). With counts, that row
+        # must still be kept free, so no entry may reach it.
+        def entries(n):
+            return tuple(("s", "entry{}".format(i)) for i in range(n))
+
+        n = 1
+        while self.view.page_count(make_scr(lines=entries(n + 1))) == 1:
+            n += 1
+        scr = make_scr(lines=(("c", "0 running, 0 waiting"),) + entries(n))
+        self.view.draw(scr, 0)
+        drawn = {t: (x, y) for t, x, y in screen.drawn}
         self.assertEqual(drawn["0 running, 0 waiting"][1], self.bottom_y())
-        self.assertFalse(any("/" in t and t[0].isdigit() for t in drawn))  # no marker
+        for text, (_, y) in drawn.items():
+            if text.startswith("entry"):
+                self.assertLessEqual(y + self.view.h_body, self.bottom_y() - 1, text)
 
     def test_counts_use_short_labels_when_tight(self):
         # Body is 42 chars wide; with the "1/3" marker the counts get 38.
@@ -360,7 +378,8 @@ class FramingTest(unittest.TestCase):
 
     def test_id_suffix_is_stable_and_uses_all_bytes(self):
         uid = bytes(range(1, 9))
-        self.assertEqual(buddy_ble.id_suffix(uid), buddy_ble.id_suffix(uid))
+        # Lanes: 1^4^7 = 0x02, 2^5^8 = 0x0F, 3^6 = 0x05.
+        self.assertEqual(buddy_ble.id_suffix(uid), "020F05")
         other = bytes(range(1, 8)) + b"\x99"
         self.assertNotEqual(buddy_ble.id_suffix(uid), buddy_ble.id_suffix(other))
         self.assertEqual(len(buddy_ble.id_suffix(uid)), 6)

@@ -141,7 +141,10 @@ class PainterTest(unittest.TestCase):
         self.tick(SETTLE)
         self.model.set_battery(40, usb=False)
         self.heartbeat(1000, tokens_today=12345)
-        self.assertFalse(self.tick(1000 + INTERVAL))
+        # Past both the throttle and the settle delay: a real change would
+        # have painted by now.
+        for t in (1000, 1000 + INTERVAL, 1000 + INTERVAL + SETTLE, 1000 + 2 * INTERVAL):
+            self.assertFalse(self.tick(t), t)
         self.assertEqual(self.presented, 1)
 
 
@@ -173,7 +176,12 @@ class PagingPolicyTest(unittest.TestCase):
         self.assertEqual(self.painter.page, 2)
 
     def test_page_turn_repaints_without_throttle(self):
+        # A status screen (prompts are always urgent, so they'd repaint
+        # anyway): a page turn must still skip the 15 s status throttle.
+        self.model.handle_line(line({"total": 1, "running": 1, "waiting": 0, "msg": "a"}), 500)
+        self.paint(500)  # status screen on the panel; throttle starts
         scr = self.model.screen(1000)
+        self.assertEqual(scr[bm.S_KIND], bm.KIND_STATUS)
         self.painter.turn(scr, 1)
         self.painter.tick(scr, 1000)
         self.assertTrue(self.painter.tick(scr, 1000 + SETTLE))

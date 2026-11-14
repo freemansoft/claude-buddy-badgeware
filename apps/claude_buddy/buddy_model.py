@@ -273,6 +273,9 @@ class BuddyModel:
     # -- connection lifecycle -------------------------------------------
 
     def on_connect(self, now_ms):
+        """A central connected. Starts the stale/dead clocks from now (a
+        full HEARTBEAT_TIMEOUT_MS before "No data") and forgets anything
+        from the previous link."""
         self.connected = True
         self.ever_connected = True
         # Give the host a full timeout window before calling it stale.
@@ -281,6 +284,9 @@ class BuddyModel:
         self._clear_activity()
 
     def on_disconnect(self):
+        """The link went (Desktop closed it, it timed out, or the app
+        dropped it as dead). Shows the pairing screen titled
+        "Disconnected"; any unanswered prompt is gone with the link."""
         self.connected = False
         self._clear_activity()
 
@@ -305,6 +311,10 @@ class BuddyModel:
         return since if since >= 0 else DEAD_LINK_MS + 1
 
     def is_stale(self, now_ms):
+        """Connected but no heartbeat for HEARTBEAT_TIMEOUT_MS (30 s, the
+        reference's "treat the connection as dead"). The header shows
+        "No data", A/B stop answering, and the waiting blink stops; the
+        link itself is only dropped later, at DEAD_LINK_MS."""
         if not self.connected or self.last_heartbeat_ms is None:
             return False
         return self._silence_ms(now_ms) > HEARTBEAT_TIMEOUT_MS
@@ -355,6 +365,12 @@ class BuddyModel:
         return []
 
     def _heartbeat(self, msg, now_ms):
+        """Desktop's state snapshot. In practice it arrives every
+        70-200 ms, almost always unchanged, so this only updates fields:
+        it never saves to flash, and the screen tuple stays equal (no
+        e-ink refresh) unless something visible changed. Strings are
+        capped (MAX_MSG, MAX_ENTRY, MAX_HINT) to bound memory. A
+        heartbeat without ``prompt`` clears any pending prompt."""
         self.last_heartbeat_ms = now_ms
         self.heartbeat_seen = True
         # Treat absent counters / text as unchanged; the reference sends
@@ -397,6 +413,16 @@ class BuddyModel:
             self.answered = None
 
     def _event(self, msg):
+        """A turn event (``{"evt":"turn", ...}``).
+
+        Desktop sends one per message as soon as it exists, including
+        user messages, tool results and thinking, and drops any over
+        4 KB. Only assistant ``text`` becomes "Claude's latest reply"
+        (a turn with no text keeps the previous reply), and the last
+        ``tool_use`` is remembered for the "Answer in the Claude App"
+        screen. The reply's screen lines are built here, once per
+        reply, not on every screen() call.
+        """
         if msg.get("evt") != "turn":
             return
         content = msg.get("content")
@@ -438,6 +464,14 @@ class BuddyModel:
         )
 
     def _command(self, cmd, msg):
+        """Desktop's ``cmd`` messages; each gets exactly one ack.
+
+        ``status`` is polled about every 2 s and must stay cheap. The
+        folder push (``char_*``/``file``/``chunk``) isn't implemented
+        and is refused with ``ok: false``, as is anything unknown, which
+        the reference allows. ``unpair`` is acked but erases nothing:
+        this firmware can't bond.
+        """
         if cmd == "status":
             return [self._status_ack()]
         if cmd == "name":
@@ -465,6 +499,15 @@ class BuddyModel:
         return {"ack": key, "ok": True, "n": 0}
 
     def _status_ack(self):
+        """The reply to ``{"cmd":"status"}``, shown in Desktop's Hardware
+        Buddy stats panel.
+
+        ``sec`` is always False: the link can't be encrypted on this
+        firmware. ``appr``/``deny`` count decisions made on the badge.
+        ``vel``, ``nap`` and ``lvl`` aren't implemented and are sent as
+        0. ``bat``/``sys`` come from the app (cached battery reading, no
+        fresh ADC sample per poll); a failure there still sends the ack.
+        """
         data = {
             "name": self.display_name(),
             "sec": False,
@@ -521,6 +564,10 @@ class BuddyModel:
         }
 
     def record_decision(self, message):
+        """Remember a decision the app has sent: the prompt shows
+        "Allowed"/"Denied" and can't be answered twice, and the
+        appr/deny count is saved (one flash write per button press).
+        The prompt stays until Desktop's next heartbeat drops it."""
         tool = self.prompt[1] if self.prompt else ""
         self.answered = (message["id"], message["decision"], tool)
         key = "appr" if message["decision"] == "once" else "deny"
@@ -557,6 +604,11 @@ class BuddyModel:
             self.battery_low = False
 
     def battery_label(self):
+        """Header battery text: ``Charging``/``Full``/``USB`` on USB power,
+        else a percentage in 25% steps (5% steps once low, never below
+        5%), or "" if unreadable. Coarse steps keep ADC jitter from
+        changing it; it's a passenger, so a change never causes an
+        e-ink refresh by itself (only battery_low and on_usb do)."""
         if self.on_usb:
             if self.charging:
                 return "Charging"
@@ -572,6 +624,9 @@ class BuddyModel:
         return "{}%".format(min(pct, 100))
 
     def tokens_label(self):
+        """``31k today`` from the heartbeat's tokens_today, for the bottom
+        row. A passenger: it climbs during every reply, and redrawing
+        the e-ink for each change would flash constantly."""
         if self.tokens_today is None:
             return ""
         return format_tokens(self.tokens_today) + " today"
@@ -612,6 +667,22 @@ class BuddyModel:
         )
 
     def _screen(self, now_ms):
+        """The first KEY_LEN-3 fields of the screen tuple. Screens in
+        priority order, first match wins:
+
+        1. not connected: pairing instructions ("Pair with Claude", or
+           "Disconnected" after a link);
+        2. a prompt: "Allow <tool>?" (A/B), or "Allowed/Denied <tool>"
+           once answered;
+        3. waiting without a prompt: Desktop's summary, answered in the
+           app (Desktop sends no prompt for long commands or questions);
+        4. no heartbeat yet since connecting;
+        5. no sessions open for NO_SESSIONS_DELAY_MS;
+        6. status: summary, Claude's reply, entries, counts.
+
+        Called every loop, so it only assembles tuples from state that
+        is already prepared (wrapping happens in the view, cached).
+        """
         # The header always shows the advertised BLE name: it is what
         # Claude Desktop's device picker lists, so the user can match
         # them. A name set by Desktop ("name" command) is only reported
@@ -687,6 +758,9 @@ class BuddyModel:
     # -- persistence ----------------------------------------------------
 
     def _save(self):
+        """Persist settings through the store (a flash write on the
+        badge). Callers save only on real changes; a failure is logged
+        and ignored so a flash error can't break the link."""
         if self._store is None:
             return
         try:

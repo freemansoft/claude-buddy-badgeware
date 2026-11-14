@@ -25,6 +25,11 @@ except ImportError:  # CPython (tests)
 
 
 class CaseLights:
+    """Drives the case lights from the app loop: tick() every pass,
+    ack() on a sent answer. Only level changes reach the hardware, so
+    calling tick() 50 times a second costs nothing while dark. The app
+    passes its BLINK_LEVEL / BLINK_MS / WAITING_* constants."""
+
     def __init__(
         self,
         set_level,
@@ -45,9 +50,15 @@ class CaseLights:
         self._shown = 0
 
     def ack(self, now):
+        """One ``ack_ms`` blink: instant feedback that A/B was sent, since
+        the e-ink takes a second or two to show "Allowed"/"Denied".
+        Shown on battery too (one short blink per press)."""
         self._ack_until = ticks_add(now, self.ack_ms)
 
     def _blip_on(self, now):
+        """Whether the double blink is lit at ``now``: on for blip_ms,
+        off for gap_ms, on for blip_ms, then dark until repeat_ms after
+        the cycle started."""
         phase = ticks_diff(now, self._cycle_start)
         if phase >= self.repeat_ms:
             # Move the cycle start forward so the difference stays small

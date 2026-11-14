@@ -23,6 +23,10 @@ the badge's buttons.
 
 ## Screen
 
+For a table of everything Claude Desktop sends and which parts the
+badge shows, see
+[What Desktop sends, and what the badge shows](docs/protocol.md#what-desktop-sends-and-what-the-badge-shows).
+
 ```
 +------------------------------------------+
 | Claude_A1B2C3              75% Connected |  device ID, battery, link status

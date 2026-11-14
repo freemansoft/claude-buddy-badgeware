@@ -107,6 +107,10 @@ def _height(f, fallback=12):
 
 
 class Theme:
+    """Colours per badge. The Badger is black on white with no greys
+    (grey text was too faint on e-ink); the Tufty (Phase 2, not yet
+    built) is light on dark."""
+
     def __init__(self, model):
         if model == "badger":
             self.bg = color.white
@@ -117,6 +121,11 @@ class Theme:
 
 
 class BuddyView:
+    """Draws one screen tuple into the framebuffer. It never pushes to
+    the panel (that's the painter's job, and the expensive part on
+    e-ink). Layout is derived from the screen size and font heights so
+    the Tufty can reuse it."""
+
     def __init__(self):
         self.theme = Theme(badge.model)
         self.f_bar = _font(BAR_FONT)
@@ -199,6 +208,9 @@ class BuddyView:
     # -- drawing ----------------------------------------------------------
 
     def draw(self, scr, page=0):
+        """Redraw the whole framebuffer for ``scr`` at ``page``: header,
+        rules, body, bottom row, footer. Always a full redraw; the panel
+        has no partial refresh, so drawing less would save nothing."""
         t = self.theme
         try:
             screen.antialias = image.OFF  # crisp pixel fonts on e-ink
@@ -340,6 +352,10 @@ class BuddyView:
         return pages
 
     def page_count(self, scr):
+        """Number of pages for ``scr``. The painter calls this every loop
+        (about 50 times a second); it's cheap because _layout caches the
+        wrapped text until the title or lines change. Wrapping a 3,000
+        character reply from scratch each time would not be."""
         return len(self._layout(scr[S_TITLE], scr[S_LINES])[2])
 
     def _draw_body(self, title, lines, tokens, page):

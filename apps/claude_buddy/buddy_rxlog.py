@@ -70,6 +70,11 @@ def _text(data, limit):
 
 
 class RxLog:
+    """The receive log (see the module docstring). Costs nothing when
+    off: the file check happens once, at construction, which is why the
+    log file must exist before the app is launched. When on, flash is
+    written at most every ``flush_ms``, never from BLE callbacks."""
+
     def __init__(
         self,
         path=LOG_PATH,
@@ -93,7 +98,10 @@ class RxLog:
         self._flush_at = None
 
     def note(self, now, tag, data):
-        """Queue one log line (no flash I/O here)."""
+        """Queue one log line (no flash I/O here). A received line equal
+        to one of the last ``recent_max`` is counted, not logged:
+        Desktop repeats the same heartbeat several times a second, and
+        logging each would fill the 32 KB file in under a minute."""
         if not self.enabled:
             return
         text = _text(data, self.line_max)
@@ -110,6 +118,9 @@ class RxLog:
         self._queue(now, tag, text)
 
     def _queue(self, now, tag, text):
+        """Buffer a line for the next flush. At most ``max_pending``
+        lines are held between flushes (bounded RAM); extras are counted
+        and reported as "lines dropped (buffer full)"."""
         if len(self._pending) >= self.max_pending:
             self._dropped += 1
             return

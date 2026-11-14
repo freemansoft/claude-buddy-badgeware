@@ -63,6 +63,15 @@ STATE_KEY = "claude_buddy"
 
 
 class _Store:
+    """BuddyModel's settings store: Badgeware's State, which keeps
+    ``/state/claude_buddy.json`` (name, owner, approve/deny counts).
+
+    Every save() is a flash write, so the model only saves when a value
+    changes or a decision is recorded, never per heartbeat. ``/state``
+    is the writable filesystem; ``/system`` (the USB drive) is read-only
+    to apps.
+    """
+
     def load(self, defaults):
         State.load(STATE_KEY, defaults)
 
@@ -90,6 +99,13 @@ def _read_battery():
 
 
 def _status():
+    """The ``bat`` and ``sys`` parts of the status ack.
+
+    Desktop polls status about every 2 s, so this must stay cheap: the
+    battery is the cached reading from _poll_battery (every
+    BATTERY_POLL_MS), not a fresh ADC sample. ``sys.up`` is seconds
+    since the app started, not since the badge booted.
+    """
     return {
         "bat": dict(_battery),
         "sys": {"up": int(time.time() - _boot_s), "heap": gc.mem_free()},
@@ -101,6 +117,14 @@ def _is_badger():
 
 
 def _display_busy():
+    """True while the e-ink panel is still refreshing.
+
+    The Badger runs with NON_BLOCKING, so display.update() returns at
+    once and the 1-2 s refresh carries on in the background. The
+    painter won't start another refresh until this is False, and A/B
+    are ignored meanwhile (Painter.answerable_doc), because the user is
+    still looking at the previous screen.
+    """
     busy = getattr(display, "busy", None)
     return bool(busy()) if callable(busy) else False
 
@@ -124,6 +148,9 @@ def _present():
 
 
 def _caselights(level):
+    """Set the case lights (0 = off). Driven only by CaseLights, which
+    calls this on changes, not every loop. The lights cost battery,
+    which is why the waiting blink runs only on USB power."""
     try:
         badge.caselights(level)
     except Exception:  # noqa: BLE001, S110
@@ -177,6 +204,8 @@ _next_battery_ms = _started_ms
 
 
 def _usb_present():
+    """VBUS pin read, called every loop (cheap: no ADC). Falls back to
+    the last battery reading if the firmware lacks usb_connected()."""
     try:
         return bool(badge.usb_connected())
     except Exception:  # noqa: BLE001
@@ -210,6 +239,26 @@ def _poll_battery(now):
 
 
 def update():
+    """One pass of the app loop; Badgeware's run() calls it repeatedly.
+
+    Order matters:
+    1. Power: USB presence every pass, the battery ADC every
+       BATTERY_POLL_MS.
+    2. BLE: handle received lines (replies go straight back), connects
+       and disconnects; drop a link silent for DEAD_LINK_MS; keep
+       advertising while unconnected; flush the receive log.
+    3. Buttons: C exits; A/B answer only the prompt on the panel
+       (never one that hasn't been drawn), and not both at once.
+    4. Lights, paging, then the painter, which refreshes the e-ink only
+       when the screen key or page changed (see buddy_painter).
+
+    Timing and power: each pass ends with LOOP_SLEEP_MS (20 ms), so
+    buttons and BLE are serviced about 50 times a second. The app
+    never sleeps (BLE needs the radio on while connected), so battery
+    life is much shorter than for Badgeware apps that do; see the
+    README's "Why the badge doesn't sleep between updates". Returning
+    True exits to the menu.
+    """
     global _buttons_armed
     badge.poll()
     now = time.ticks_ms()

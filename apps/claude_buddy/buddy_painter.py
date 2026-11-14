@@ -36,7 +36,16 @@ except ImportError:  # CPython (tests)
 
 
 class Painter:
+    """Owns the e-ink panel: what's on it, which page, and when to
+    refresh. Every refresh on the Badger is a full-screen 4-grey update
+    of about 1-2 s that visibly flashes, so the policy here is mostly
+    about doing fewer of them (see the module docstring)."""
+
     def __init__(self, view, present, busy, settle_ms, status_interval_ms):
+        """``present()`` pushes the framebuffer to the panel; ``busy()`` is
+        True while a refresh is still in progress (the app runs the
+        panel non-blocking). ``settle_ms`` and ``status_interval_ms`` are
+        the app's URGENT_SETTLE_MS and STATUS_MIN_INTERVAL_MS."""
         self.view = view
         self._present = present
         self._busy = busy
@@ -54,6 +63,9 @@ class Painter:
     # -- input --------------------------------------------------------------
 
     def hold(self, now, ms):
+        """Paint nothing for ``ms``. Used after A/B (ANSWER_SETTLE_MS) so
+        "Allowed"/"Denied" and Desktop's follow-up heartbeat, which
+        clears the prompt, land in one refresh instead of two."""
         self.hold_until_ms = ticks_add(now, ms)
         self.first_diff_ms = None
 
@@ -123,6 +135,9 @@ class Painter:
         return True
 
     def _sync_doc(self, scr):
+        """Back to page 1 when the document changes (a new prompt id or a
+        new reply), but not for routine status updates, so a heartbeat
+        several times a second can't yank the reader off their page."""
         if scr[S_DOC] != self.doc:
             self.doc = scr[S_DOC]
             self.page = 0

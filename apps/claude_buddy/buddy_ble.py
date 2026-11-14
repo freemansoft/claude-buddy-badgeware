@@ -48,7 +48,11 @@ _ADV_UUID128_COMPLETE = const(0x07)
 _ADV_NAME_SHORT = const(0x08)
 _ADV_NAME_COMPLETE = const(0x09)
 
+# Claude Desktop's picker only lists devices whose name starts "Claude".
 _NAME_PREFIX = "Claude"
+# Advertising every 100 ms: quick for Desktop to find, but the radio is
+# busy the whole time the app is unconnected (a power cost; a longer
+# interval is a Phase 3 roadmap item).
 _ADV_INTERVAL_US = const(100000)
 _ADV_RETRY_MS = const(2000)
 _DROP_RETRY_MS = const(5000)
@@ -88,7 +92,25 @@ def _device_suffix():
 
 
 class BuddyBLE:
+    """The badge's side of the Hardware Buddy link: a NUS peripheral that
+    advertises as ``Claude_XXXXXX``, accepts one central at a time
+    (Badgeware's BTstack allows a single connection), turns received
+    writes into newline-delimited lines, and sends JSON lines back as
+    notifications.
+
+    Nothing here blocks or allocates much in IRQ context; the app calls
+    poll(), service() and send() from its main loop.
+    """
+
     def __init__(self):
+        """Turn the radio on, register the service and start advertising.
+
+        Asks for a 247-byte MTU so replies go out in a few notifications
+        instead of many 20-byte ones; Desktop may or may not accept it
+        (see _IRQ_MTU_EXCHANGED). The RX characteristic uses a 1 KB
+        append-mode buffer so writes that land between two reads are
+        kept, not overwritten.
+        """
         self._ble = bluetooth.BLE()
         self._ble.active(True)
 
@@ -134,6 +156,11 @@ class BuddyBLE:
     # -- IRQ (scheduler context): queue only ----------------------------
 
     def _irq(self, event, data):
+        """BLE events, run from the MicroPython scheduler: only record
+        them for poll(). RX data is read out at once (gatts_read) so the
+        append buffer never fills; beyond _MAX_QUEUE pending writes,
+        further data is dropped rather than growing memory without
+        bound (the framing then discards the broken line)."""
         if event == _IRQ_CENTRAL_CONNECT:
             self._conn = data[0]
             self._mtu = _DEFAULT_MTU
@@ -205,7 +232,14 @@ class BuddyBLE:
         return True
 
     def send(self, obj):
-        """Send one JSON object as a line. Returns True if queued."""
+        """Send one JSON object as a line. Returns True if queued.
+
+        Split into notifications of MTU - 3 bytes (20 until Desktop
+        agrees a larger MTU). If a notify fails part-way, the earlier
+        chunks have already gone out and Desktop sees a broken line;
+        the caller treats False as "not sent" (a permission decision
+        isn't recorded, so the user can press again).
+        """
         conn = self._conn
         if conn is None:
             return False
@@ -220,6 +254,9 @@ class BuddyBLE:
         return True
 
     def close(self):
+        """Stop advertising, drop any connection and turn the radio off
+        (on exit to the menu). Once the app exits, Claude Desktop can't
+        reach the badge until it's opened again."""
         try:
             self._ble.gap_advertise(None)
         except Exception:  # noqa: BLE001, S110
@@ -238,6 +275,9 @@ class BuddyBLE:
     # -- internals --------------------------------------------------------
 
     def _advertise(self):
+        """Start connectable advertising every _ADV_INTERVAL_US. Returns
+        False on failure; service() then retries after _ADV_RETRY_MS
+        rather than every loop."""
         try:
             self._ble.gap_advertise(
                 _ADV_INTERVAL_US,
@@ -252,6 +292,12 @@ class BuddyBLE:
         return True
 
     def _feed(self, data, out):
+        """Split received bytes into lines on "\\n" (writes don't line
+        up with lines: one JSON line can span many 20-byte writes, and
+        one write can hold the end of one line and the start of the
+        next). Complete lines are appended to ``out``; a line over
+        _MAX_LINE is dropped whole (Desktop's turn events are capped at
+        4 KB, so this only catches corrupt input)."""
         start = 0
         while True:
             end = data.find(b"\n", start)
