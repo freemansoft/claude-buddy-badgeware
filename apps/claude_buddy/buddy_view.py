@@ -26,6 +26,7 @@ as.
 
 from buddy_model import (
     COUNTS,
+    KIND_PAIR,
     KIND_PROMPT,
     KIND_WAITING,
     S_KIND,
@@ -40,6 +41,19 @@ from buddy_model import (
 )
 
 PAD = 4
+# The not-connected screens ("Pair with Claude", "Disconnected") draw a
+# thick frame around the content area, so they can't be mistaken for a
+# screen with Claude's data on it. Black only, like all Badger text; it
+# is drawn as part of the refresh the connection change already causes.
+# The frame sits well inside the content area, with blank space all
+# round it, so it reads as a box rather than as part of the dividers.
+FRAME_MARGIN_X = 16  # space between the screen edge and the frame
+FRAME_MARGIN_Y = 10  # space between the dividers and the frame
+FRAME_W = 3  # frame thickness
+FRAME_GAP = 4  # space between the frame and the text
+# Inside the frame the title is centred, with a rule across the frame
+# between it and the instructions, FRAME_GAP each side.
+TITLE_RULE_W = 2  # thickness of that rule
 BAR_FONT = "nope"
 TITLE_FONT = "absolute"
 BODY_FONT = "nope"
@@ -144,6 +158,17 @@ class BuddyView:
         self.body_w = self.w - 2 * PAD
         self.body_top = self.top_rule + 1 + PAD
         self.body_bottom = self.bottom_rule - PAD
+        # Content areas as (x, w, top, bottom): plain, and inset inside
+        # the frame of the not-connected screens.
+        inset_x = FRAME_MARGIN_X + FRAME_W + FRAME_GAP
+        inset_y = FRAME_MARGIN_Y + FRAME_W + FRAME_GAP
+        self.plain_area = (self.body_x, self.body_w, self.body_top, self.body_bottom)
+        self.framed_area = (
+            inset_x,
+            self.w - 2 * inset_x,
+            self.top_rule + 1 + inset_y,
+            self.bottom_rule - inset_y,
+        )
         self._layout_key = None
         self._layout_value = None
 
@@ -223,8 +248,32 @@ class BuddyView:
         screen.pen = t.fg
         screen.rectangle(0, self.top_rule, self.w, 1)
         screen.rectangle(0, self.bottom_rule, self.w, 1)
-        self._draw_body(scr[S_TITLE], scr[S_LINES], scr[S_TOKENS], page)
+        area = self._area(scr)
+        if area is self.framed_area:
+            self._draw_frame()
+        self._draw_body(scr[S_TITLE], scr[S_LINES], scr[S_TOKENS], page, area)
         self._draw_footer(scr[S_ACTIONABLE], scr[S_KIND])
+
+    def _area(self, scr):
+        """The content area for ``scr``: framed when not connected."""
+        return self.framed_area if scr[S_KIND] == KIND_PAIR else self.plain_area
+
+    def _draw_frame(self):
+        """A FRAME_W-thick box inset from the dividers and screen
+        edges, as four bars."""
+        x = FRAME_MARGIN_X
+        y = self.top_rule + 1 + FRAME_MARGIN_Y
+        w = self.w - 2 * FRAME_MARGIN_X
+        h = self.bottom_rule - FRAME_MARGIN_Y - y
+        screen.rectangle(x, y, w, FRAME_W)  # top
+        screen.rectangle(x, y + h - FRAME_W, w, FRAME_W)  # bottom
+        screen.rectangle(x, y, FRAME_W, h)  # left
+        screen.rectangle(x + w - FRAME_W, y, FRAME_W, h)  # right
+
+    def _draw_title_rule(self, y):
+        """The rule under a framed title, joining the frame's sides."""
+        x = FRAME_MARGIN_X
+        screen.rectangle(x, y, self.w - 2 * x, TITLE_RULE_W)
 
     def _draw_header(self, name, status, battery):
         """Device identifier (left), battery, link status (right).
@@ -287,7 +336,7 @@ class BuddyView:
 
     # -- layout and paging --------------------------------------------------
 
-    def _layout(self, title, lines):
+    def _layout(self, title, lines, area):
         """Wrap the title and body once per content change, then split
         the body rows into pages.
 
@@ -301,15 +350,20 @@ class BuddyView:
         the right (see _draw_bottom_row). That row is kept free whenever
         there are counts (status screen) or more than one page.
         """
-        key = (title, lines)
+        key = (title, lines, area)
         if key == self._layout_key:
             return self._layout_value
 
+        _, body_w, body_top, body_bottom = area
         screen.font = self.f_title
-        title_lines = self.wrap(title, self.body_w, TITLE_MAX_LINES) if title else []
-        top = self.body_top
+        title_lines = self.wrap(title, body_w, TITLE_MAX_LINES) if title else []
+        top = body_top
         if title_lines:
-            top += len(title_lines) * self.h_title + LINE_GAP * 2
+            top += len(title_lines) * self.h_title
+            if area is self.framed_area:
+                top += FRAME_GAP + TITLE_RULE_W + FRAME_GAP  # the title rule
+            else:
+                top += LINE_GAP * 2
 
         screen.font = self.f_body
         rows = []
@@ -323,11 +377,11 @@ class BuddyView:
             if rows:
                 rows.append(None)
             max_lines = MAX_WRAP_LINES if mode == WRAP else 1
-            rows.extend(self.wrap(text, self.body_w, max_lines))
+            rows.extend(self.wrap(text, body_w, max_lines))
 
-        bottom = self.body_bottom - self.h_body
+        bottom = body_bottom - self.h_body
         reserved = counts is not None
-        pages = self._paginate(rows, top, bottom if reserved else self.body_bottom)
+        pages = self._paginate(rows, top, bottom if reserved else body_bottom)
         if len(pages) > 1 and not reserved:
             pages = self._paginate(rows, top, bottom)
 
@@ -356,18 +410,25 @@ class BuddyView:
         (about 50 times a second); it's cheap because _layout caches the
         wrapped text until the title or lines change. Wrapping a 3,000
         character reply from scratch each time would not be."""
-        return len(self._layout(scr[S_TITLE], scr[S_LINES])[2])
+        return len(self._layout(scr[S_TITLE], scr[S_LINES], self._area(scr))[2])
 
-    def _draw_body(self, title, lines, tokens, page):
+    def _draw_body(self, title, lines, tokens, page, area):
         screen.pen = self.theme.fg
-        title_lines, top, pages, counts = self._layout(title, lines)
+        title_lines, top, pages, counts = self._layout(title, lines, area)
         page = max(0, min(page, len(pages) - 1))
+        body_x, body_w = area[0], area[1]
+        framed = area is self.framed_area
 
         screen.font = self.f_title
-        y = self.body_top
+        y = area[2]
         for line in title_lines:
-            self._text(line, self.body_x, y)
+            x = body_x
+            if framed:
+                x += (body_w - self._width(line)) // 2
+            self._text(line, x, y)
             y += self.h_title
+        if framed and title_lines:
+            self._draw_title_rule(y + FRAME_GAP)
 
         screen.font = self.f_body
         y = top
@@ -375,13 +436,13 @@ class BuddyView:
             if row is None:
                 y += LINE_GAP
                 continue
-            self._text(row, self.body_x, y)
+            self._text(row, body_x, y)
             y += self.h_body
 
         marker = "{}/{}".format(page + 1, len(pages)) if len(pages) > 1 else ""
-        self._draw_bottom_row(counts, tokens, marker)
+        self._draw_bottom_row(counts, tokens, marker, area)
 
-    def _draw_bottom_row(self, counts, tokens, marker):
+    def _draw_bottom_row(self, counts, tokens, marker, area):
         """Counts (and today's tokens) on the left, page marker on the
         right. The counts give way to the marker: full labels, then
         "run"/"wait", then cut with "...". Empty counts ("") show today's
@@ -389,11 +450,12 @@ class BuddyView:
         text = ", ".join(part for part in (counts, tokens if counts is not None else "") if part)
         if not text and not marker:
             return
-        y = self.body_bottom - self.h_body + 1
-        room = self.body_w
+        body_x, body_w, _, body_bottom = area
+        y = body_bottom - self.h_body + 1
+        room = body_w
         if marker:
             mw = self._width(marker)
-            self._text(marker, self.body_x + self.body_w - mw, y)
+            self._text(marker, body_x + body_w - mw, y)
             room -= mw + HEADER_GAP
         if not text:
             return
@@ -402,4 +464,4 @@ class BuddyView:
                 text = text.replace(full, short)
         fitted = self.wrap(text, max(room, 0), 1)
         if fitted:
-            self._text(fitted[0], self.body_x, y)
+            self._text(fitted[0], body_x, y)
