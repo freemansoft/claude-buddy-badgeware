@@ -420,6 +420,19 @@ done.
   - Show the time from Desktop's `time` sync.
   - Raise the BLE link security if a future Badgeware firmware enables
     BTstack pairing/bonding.
+- **Ideas (unprioritized, low priority):**
+  - **Battery icon instead of words.** The pixel fonts have no battery
+    or charging symbols, so the header uses words (`75%`, `Charging`,
+    `Full`, `USB`). An icon could be drawn from rectangles, as the
+    Badgeware menu does (`firmware/apps/menu/ui.py`): a 16×8 outline
+    with a 1 px terminal and a fill bar for the 25% steps, a small bolt
+    while charging, and a solid fill when full. It takes about 17 px
+    instead of up to 48 px, so the header would rarely drop it. Keep
+    the text (`5%`) next to it when low, since 5% steps don't show in a
+    12 px fill. Don't animate the fill while charging as the menu does:
+    that would refresh the e-ink constantly. An alternative is a custom
+    inline glyph registered with `image.add_glyph()` and written as
+    `[bat:75]` in the header text.
 
 ### Phase 2 design: Tufty display switch
 
