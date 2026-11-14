@@ -1,0 +1,92 @@
+---
+name: buddy-docs
+description: Writing and formatting standard for Claude Buddy's Markdown (README.md, docs/*.md, skill files). Use whenever you create or edit any .md file in this repo, and before every commit that includes Markdown, since a pre-commit hook rejects unformatted files. Covers prettier (pinned version), wrapping, tables, tone and spelling, which doc owns which topic, link anchors, and how to mark Tufty work that isn't implemented yet.
+---
+
+# Claude Buddy documentation standard
+
+## Formatting: prettier, pinned
+
+All Markdown is formatted with **prettier 3.9.10**, settings in
+`.prettierrc.json` (`proseWrap: preserve`). The version is pinned so
+that everyone's tables and lists come out byte-identical; an unpinned
+`npx prettier` can reformat files nobody touched.
+
+After editing Markdown, and before committing:
+
+```bash
+npx --yes prettier@3.9.10 --write <changed .md files>
+npx --yes prettier@3.9.10 --check "**/*.md"
+```
+
+`.githooks/pre-commit` checks the staged `.md` files and blocks the
+commit if any aren't formatted. It's active when
+`git config core.hooksPath` prints `.githooks`; if it doesn't, tell the
+user rather than setting it silently. Don't bypass the hook with
+`--no-verify`; format the files instead.
+
+If you change the prettier version, change it in all three places: this
+file, `.githooks/pre-commit`, and the README's "Checks on the host".
+
+## Wrapping and layout
+
+`proseWrap: preserve` means prettier won't rewrap prose, so wrap by
+hand:
+
+- Prose and list items at about **72 columns**. Continuation lines of a
+  list item are indented to the item's text.
+- Tables are never wrapped; prettier aligns them. Keep cells short
+  enough to read, and move long explanations into prose below.
+- Code, commands and file paths in backticks. Shell blocks are
+  `bash`; JSON examples are `json`.
+- `**Bold lead-in:**` for the key term at the start of a bullet.
+
+## Tone and spelling
+
+The docs are written in plain, short sentences for someone who builds
+badges, not someone who wrote this code.
+
+- British spelling (_behaviour_, _colour_, _minimise_), matching the
+  existing docs.
+- Say what happens, with the number: "repaints at most every 15 s",
+  not "repaints infrequently".
+- Be honest about what's unverified. Anything not yet tried on the
+  hardware says so (e.g. "not yet tested on hardware", "No
+  measurements yet").
+- Explain why, briefly, when a choice isn't obvious.
+
+## Which doc owns what
+
+Each topic has one home. Other docs link to it instead of copying it,
+so the two can't drift apart.
+
+| Topic                                                       | Home                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------ |
+| What the badge does, install, buttons, screens, roadmap     | `README.md`                                                  |
+| Wire protocol, what's implemented, deviations from the spec | `docs/protocol.md`                                           |
+| Decisions not to use parts of the spec                      | `docs/protocol.md` "Decisions"; README roadmap "Not planned" |
+| Power: consumers, USB power vs battery, power constants     | `docs/power.md`                                              |
+| Badger (e-ink) vs Tufty (LCD) display differences           | `docs/devices.md`                                            |
+| How Claude should change code / protocol / docs             | `.claude/skills/`                                            |
+
+When you change a number (a timeout, a step, a limit), grep the docs
+for the old value and the constant's name: some numbers appear in more
+than one place on purpose, as summaries.
+
+## Devices: marking future work
+
+The Tufty 2350 has no display code yet. Wherever a doc compares the
+badges, the Tufty entry says _Not implemented_ and, where there's one,
+the plan (e.g. "Not implemented (plan: exact %, live)"). If the code
+sets a Tufty value that hasn't been run on hardware, call it an
+"untested placeholder". Every behaviour difference between the badges
+gets a row in `docs/devices.md`.
+
+## Links and anchors
+
+- Link between docs with relative paths (`docs/power.md`,
+  `../README.md#roadmap`).
+- Renaming a heading changes its anchor. Before renaming, grep the repo
+  for `#<old-anchor>` and fix every link.
+- External references go in the README's References section, with
+  what each one was used for.

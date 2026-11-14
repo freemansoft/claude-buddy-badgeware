@@ -4,3 +4,7 @@ __pycache__/
 .venv/
 .DS_Store
 .ruff_cache/
+
+# Skill eval cases and workspaces are recreated when needed, not committed.
+.claude/skills/*/evals/
+.claude/skills/*-workspace/

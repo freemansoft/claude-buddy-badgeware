@@ -255,8 +255,8 @@ def update():
     Timing and power: each pass ends with LOOP_SLEEP_MS (20 ms), so
     buttons and BLE are serviced about 50 times a second. The app
     never sleeps (BLE needs the radio on while connected), so battery
-    life is much shorter than for Badgeware apps that do; see the
-    README's "Why the badge doesn't sleep between updates". Returning
+    life is much shorter than for Badgeware apps that do; see
+    docs/power.md, "Why the badge never sleeps". Returning
     True exits to the menu.
     """
     global _buttons_armed
