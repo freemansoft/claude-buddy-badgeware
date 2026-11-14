@@ -22,6 +22,7 @@ class FakeScreen:
 
     def __init__(self):
         self.drawn = []
+        self.rects = []
         self.font = None
         self.pen = None
 
@@ -43,9 +44,10 @@ class FakeScreen:
 
     def clear(self):
         self.drawn = []
+        self.rects = []
 
     def rectangle(self, *args):
-        pass
+        self.rects.append(tuple(args))
 
 
 def install_badgeware_stubs():
@@ -228,6 +230,61 @@ class WrapTest(unittest.TestCase):
                                              battery="Charging"))
             for expected in ("Claude_A1B2C3", "Charging", status):
                 self.assertIn(expected, texts, status)
+
+    # -- the not-connected frame -------------------------------------------
+
+    PAIR_LINES = (("w", "In Claude Desktop: Developer > Open Hardware Buddy... > Connect"),
+                  ("s", "Pick Claude_A1B2C3"))
+
+    def frame_bars(self):
+        """Rectangles other than the two 1 px full-width dividers."""
+        return [r for r in screen.rects if not (r[2] == 264 and r[3] == 1)]
+
+    def test_not_connected_screens_are_framed(self):
+        for title in ("Pair with Claude", "Disconnected"):
+            self.view.draw(make_scr(kind="pair", title=title, status="Not connected",
+                                    lines=self.PAIR_LINES))
+            bars = self.frame_bars()
+            self.assertEqual(len(bars), 4, title)
+            # Each bar is FRAME_W thick, inside the screen and dividers.
+            for x, y, w, h in bars:
+                self.assertEqual(min(w, h), buddy_view.FRAME_W, title)
+                # Inset from the edges and dividers, with space round it.
+                self.assertGreaterEqual(x, buddy_view.FRAME_MARGIN_X)
+                self.assertLessEqual(x + w, 264 - buddy_view.FRAME_MARGIN_X)
+                self.assertGreater(y, self.view.top_rule + buddy_view.FRAME_MARGIN_Y)
+                self.assertLessEqual(y + h, self.view.bottom_rule - buddy_view.FRAME_MARGIN_Y)
+
+    def test_connected_screens_are_not_framed(self):
+        for scr in (make_scr(kind="status", lines=(("c", "0 running, 0 waiting"),)),
+                    make_scr(kind="prompt", lines=(("w", "ls"),), actionable=True),
+                    make_scr(kind="waiting", title="Approval needed"),
+                    make_scr(kind="connected", title="Connected")):
+            self.view.draw(scr)
+            self.assertEqual(self.frame_bars(), [], scr[2])
+
+    def test_framed_text_sits_inside_the_frame(self):
+        self.view.draw(make_scr(kind="pair", title="Disconnected", status="Not connected",
+                                lines=self.PAIR_LINES))
+        x0, w, top, bottom = self.view.framed_area
+        body = [(t, x, y) for t, x, y in screen.drawn
+                if self.view.top_rule < y < self.view.bottom_rule]
+        self.assertIn("Disconnected", [t for t, _, _ in body])
+        self.assertIn("Pick Claude_A1B2C3", [t for t, _, _ in body])
+        for text, x, y in body:
+            self.assertGreaterEqual(x, x0, text)
+            self.assertLessEqual(x + len(text) * CHAR_W, x0 + w, text)
+            self.assertGreaterEqual(y, top, text)
+            self.assertLessEqual(y, bottom, text)
+        # Nothing is lost to the narrower area: the instructions still wrap
+        # whole, with no word cut.
+        joined = " ".join(t for t, _, _ in body)
+        self.assertIn("Open Hardware", joined)
+        # The smaller area still holds everything on one page, so there's
+        # no page marker and nothing to page through.
+        scr = make_scr(kind="pair", title="Pair with Claude", status="Not connected",
+                       lines=self.PAIR_LINES)
+        self.assertEqual(self.view.page_count(scr), 1)
 
     def test_identifier_never_truncated_when_header_is_tight(self):
         # 264 px / 6 px per char = 44 chars across; make it overflow.
