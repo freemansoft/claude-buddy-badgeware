@@ -11,28 +11,28 @@ made where the spec leaves room. Code: `apps/claude_buddy/buddy_model.py`
 Everything Claude Desktop sends over the link, from the reference and
 from the badge's receive log, and what the badge does with it.
 
-| Category | Item | What it is | On the badge |
-|---|---|---|---|
-| **Heartbeat** (every 70–200 ms in practice) | `prompt {id, tool, hint}` | A permission request the badge can answer | ✅ `Allow <tool>?` with the command (paged), and A/B |
-| | `waiting` | Sessions blocked on approval | ✅ count on the bottom row; triggers the "Answer in the Claude App" screen, `N more waiting` and `N sessions waiting` |
-| | `running` | Sessions actively generating | ✅ count on the bottom row |
-| | `total` | All open sessions | ⚙️ not shown as a number; 0 shows the "No sessions" screen, and it decides whether the waiting tool is shown |
-| | `msg` | Desktop's one-line summary, e.g. `approve: Bash`, `(called Bash)` | ✅ title of the status and waiting screens |
-| | `entries` | Recent transcript lines, newest first | ✅ one line each, after the reply (usually a later page) |
-| | `tokens_today` | Output tokens since local midnight | ✅ `31k today` on the bottom row |
-| | `tokens` | Output tokens since Desktop started | ❌ ignored |
-| | `completed` | "Turn finished" flag (read by the reference firmware, not in REFERENCE.md) | ❌ ignored; not yet seen in the receive log |
-| **Turn events** (one per message, sent at once; over 4 KB dropped by Desktop) | assistant `text` | What Claude writes | ✅ `Claude: …` reply: markdown stripped, capped at 3,000 characters, paged |
-| | assistant `tool_use` | Tool name and input (the full command) | ⚙️ only on the "Answer in the Claude App" screen, with one session open and when `msg` names the tool |
-| | assistant `thinking` | Thinking blocks (empty text in the log) | ❌ ignored |
-| | user messages | What you type | ❌ ignored |
-| | `tool_result` | Tool output | ❌ ignored |
-| **One-shot** | `time [epoch, tz_offset]` | Clock sync on connect | ❌ ignored (roadmap: "updated HH:MM") |
-| **Commands** (each acked) | `status` | Polled about every 2 s for Desktop's stats panel | ↩️ answered (battery, uptime, approve/deny counts), not displayed |
-| | `name` | Desktop's name for the buddy | ↩️ saved and reported back; the header keeps the BLE name so it matches the picker |
-| | `owner` | The user's name | ❌ saved, never shown |
-| | `unpair` | Erase bonds | ↩️ acked; nothing to erase (this firmware can't bond) |
-| | `char_begin` / `file` / `chunk` / `file_end` / `char_end` | Folder push (images, config) | ❌ refused (`ok:false`) |
+| Category                                                                      | Item                                                      | What it is                                                                 | On the badge                                                                                                          |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Heartbeat** (every 70–200 ms in practice)                                   | `prompt {id, tool, hint}`                                 | A permission request the badge can answer                                  | ✅ `Allow <tool>?` with the command (paged), and A/B                                                                  |
+|                                                                               | `waiting`                                                 | Sessions blocked on approval                                               | ✅ count on the bottom row; triggers the "Answer in the Claude App" screen, `N more waiting` and `N sessions waiting` |
+|                                                                               | `running`                                                 | Sessions actively generating                                               | ✅ count on the bottom row                                                                                            |
+|                                                                               | `total`                                                   | All open sessions                                                          | ⚙️ not shown as a number; 0 shows the "No sessions" screen, and it decides whether the waiting tool is shown          |
+|                                                                               | `msg`                                                     | Desktop's one-line summary, e.g. `approve: Bash`, `(called Bash)`          | ✅ title of the status and waiting screens                                                                            |
+|                                                                               | `entries`                                                 | Recent transcript lines, newest first                                      | ✅ one line each, after the reply (usually a later page)                                                              |
+|                                                                               | `tokens_today`                                            | Output tokens since local midnight                                         | ✅ `31k today` on the bottom row                                                                                      |
+|                                                                               | `tokens`                                                  | Output tokens since Desktop started                                        | ❌ ignored                                                                                                            |
+|                                                                               | `completed`                                               | "Turn finished" flag (read by the reference firmware, not in REFERENCE.md) | ❌ ignored; not yet seen in the receive log                                                                           |
+| **Turn events** (one per message, sent at once; over 4 KB dropped by Desktop) | assistant `text`                                          | What Claude writes                                                         | ✅ `Claude: …` reply: markdown stripped, capped at 3,000 characters, paged                                            |
+|                                                                               | assistant `tool_use`                                      | Tool name and input (the full command)                                     | ⚙️ only on the "Answer in the Claude App" screen, with one session open and when `msg` names the tool                 |
+|                                                                               | assistant `thinking`                                      | Thinking blocks (empty text in the log)                                    | ❌ ignored                                                                                                            |
+|                                                                               | user messages                                             | What you type                                                              | ❌ ignored                                                                                                            |
+|                                                                               | `tool_result`                                             | Tool output                                                                | ❌ ignored                                                                                                            |
+| **One-shot**                                                                  | `time [epoch, tz_offset]`                                 | Clock sync on connect                                                      | ❌ ignored: no clock on screen, by [decision](#decisions)                                                             |
+| **Commands** (each acked)                                                     | `status`                                                  | Polled about every 2 s for Desktop's stats panel                           | ↩️ answered (battery, uptime, approve/deny counts), not displayed                                                     |
+|                                                                               | `name`                                                    | Desktop's name for the buddy                                               | ↩️ saved and reported back; the header keeps the BLE name so it matches the picker                                    |
+|                                                                               | `owner`                                                   | The user's name                                                            | ❌ saved, never shown                                                                                                 |
+|                                                                               | `unpair`                                                  | Erase bonds                                                                | ↩️ acked; nothing to erase (this firmware can't bond)                                                                 |
+|                                                                               | `char_begin` / `file` / `chunk` / `file_end` / `char_end` | Folder push (images, config)                                               | ❌ refused (`ok:false`), by [decision](#decisions)                                                                    |
 
 ✅ shown · ⚙️ chooses the screen, not shown itself · ↩️ answered, not shown · ❌ not used
 
@@ -43,18 +43,18 @@ The details of each message are in the sections below.
 Nordic UART Service. Each message is one UTF-8 JSON object terminated
 by `\n`, sent in either direction.
 
-| Role | UUID | Properties |
-|---|---|---|
-| Service | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | |
+| Role                 | UUID                                   | Properties                    |
+| -------------------- | -------------------------------------- | ----------------------------- |
+| Service              | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` |                               |
 | RX (Desktop → badge) | `6e400002-b5a3-f393-e0a9-e50e24dcca9e` | write, write-without-response |
-| TX (badge → Desktop) | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` | read, notify |
+| TX (badge → Desktop) | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` | read, notify                  |
 
 - **Name:** `Claude_XXXXXX`. Claude Desktop's picker filters on the
   `Claude` prefix.
   - `XXXXXX` is the RP2350's 8-byte unique chip ID, XOR-folded to 3
     bytes, so it's stable across reboots.
   - The reference suggests MAC bytes instead. That's avoided here
-    because BTstack falls back to a *random* static address when the
+    because BTstack falls back to a _random_ static address when the
     controller reports no public one, and that address could change
     every boot.
   - The badge's header always shows this name, so it can be matched
@@ -82,18 +82,18 @@ by `\n`, sent in either direction.
 
 ## Desktop → badge
 
-| Message | Handling |
-|---|---|
-| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. `total` 0 for 5 s shows the "No sessions" screen (the reference: "`total == 0` means nothing is open"). Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) with the session counts on the bottom row of the status screen, but never triggers a refresh by itself. `tokens` is ignored. |
-| `{"evt":"turn", ...}` | Assistant turns: the `text` blocks become **Claude's latest reply** on the status screen. Simple markdown is stripped; it's capped at 3,000 characters and 40 paragraphs, and paged with UP/DOWN. A turn with no text (tool calls only) keeps the previous reply. The last `tool_use` name and a one-line summary are also kept; they're shown only when Desktop reports `waiting` without a `prompt`, a single session is open, and Desktop's `msg` names that tool (Desktop drops turn events over 4 KB, so the last tool seen may not be the one waiting). User turns are ignored. |
-| `{"time":[epoch, tz_offset]}` | Ignored (no clock on screen yet). |
-| Anything else without `cmd` or `evt` | Treated as a heartbeat only if it has at least one heartbeat field (`total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, `prompt`). Otherwise ignored, so an unknown one-shot message can't clear a pending prompt. |
-| `{"cmd":"status"}` | Replies with the status ack (below). |
-| `{"cmd":"name","name":...}` | Saved and reported back as `data.name` in the status ack. Ack `{"ack":"name","ok":true,"n":0}`. The advertised BLE name doesn't change, and the header keeps showing it so it matches the picker. Without a `name` string: ack `ok:false` and the saved name is kept. |
-| `{"cmd":"owner","name":...}` | Saved (also accepts an `owner` key). Ack `ok:true`. Without a value: ack `ok:false` and the saved owner is kept. Flash is only written when the value changes (Desktop sends it on every connect). |
-| `{"cmd":"unpair"}` | Ack `ok:true`. There are no bonds to erase on this firmware. |
-| `char_begin` / `file` / `chunk` / `file_end` / `char_end` | Ack `ok:false`, `"error":"not supported"`. |
-| Anything else with `cmd` | Ack `ok:false`, `"error":"unknown command"`. |
+| Message                                                                                                                             | Handling                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. `total` 0 for 5 s shows the "No sessions" screen (the reference: "`total == 0` means nothing is open"). Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) with the session counts on the bottom row of the status screen, but never triggers a refresh by itself. `tokens` is ignored.                                                       |
+| `{"evt":"turn", ...}`                                                                                                               | Assistant turns: the `text` blocks become **Claude's latest reply** on the status screen. Simple markdown is stripped; it's capped at 3,000 characters and 40 paragraphs, and paged with UP/DOWN. A turn with no text (tool calls only) keeps the previous reply. The last `tool_use` name and a one-line summary are also kept; they're shown only when Desktop reports `waiting` without a `prompt`, a single session is open, and Desktop's `msg` names that tool (Desktop drops turn events over 4 KB, so the last tool seen may not be the one waiting). User turns are ignored. |
+| `{"time":[epoch, tz_offset]}`                                                                                                       | Ignored. There is no clock on screen, by [decision](#decisions).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Anything else without `cmd` or `evt`                                                                                                | Treated as a heartbeat only if it has at least one heartbeat field (`total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, `prompt`). Otherwise ignored, so an unknown one-shot message can't clear a pending prompt.                                                                                                                                                                                                                                                                                                                                             |
+| `{"cmd":"status"}`                                                                                                                  | Replies with the status ack (below).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `{"cmd":"name","name":...}`                                                                                                         | Saved and reported back as `data.name` in the status ack. Ack `{"ack":"name","ok":true,"n":0}`. The advertised BLE name doesn't change, and the header keeps showing it so it matches the picker. Without a `name` string: ack `ok:false` and the saved name is kept.                                                                                                                                                                                                                                                                                                                 |
+| `{"cmd":"owner","name":...}`                                                                                                        | Saved (also accepts an `owner` key). Ack `ok:true`. Without a value: ack `ok:false` and the saved owner is kept. Flash is only written when the value changes (Desktop sends it on every connect).                                                                                                                                                                                                                                                                                                                                                                                    |
+| `{"cmd":"unpair"}`                                                                                                                  | Ack `ok:true`. There are no bonds to erase on this firmware.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `char_begin` / `file` / `chunk` / `file_end` / `char_end`                                                                           | Ack `ok:false`, `"error":"not supported"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Anything else with `cmd`                                                                                                            | Ack `ok:false`, `"error":"unknown command"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ## Badge → Desktop
 
@@ -106,12 +106,29 @@ Sent on A (`once`) or B (`deny`), at most once per prompt id, and only
 for the prompt currently drawn on the panel (not one that has arrived
 but isn't on screen yet). A and B pressed together send nothing.
 
+**Prompt ids.** The badge keeps `prompt.id` cut to 128 characters, and
+turns an id that isn't a string into one (`_to_str` in
+`buddy_model.py`). The spec says the `id` sent back must match
+`prompt.id` exactly. So an id longer than 128 characters, or a number,
+would come back changed, and Desktop would ignore the decision with no
+error on either side. The ids seen so far are short strings, so this
+hasn't happened yet. If A or B seems to do nothing, use the
+[receive log](../README.md#logging-what-claude-desktop-sends): compare
+the `id` in the `RX` heartbeat with the one in the `TX` permission
+line.
+
 ```json
-{"ack":"status","ok":true,"data":{
-  "name":"Claude_A1B2C3","sec":false,
-  "bat":{"pct":87,"mV":3990,"usb":true},
-  "sys":{"up":8412,"heap":84200},
-  "stats":{"appr":42,"deny":3,"vel":0,"nap":0,"lvl":0}}}
+{
+  "ack": "status",
+  "ok": true,
+  "data": {
+    "name": "Claude_A1B2C3",
+    "sec": false,
+    "bat": { "pct": 87, "mV": 3990, "usb": true },
+    "sys": { "up": 8412, "heap": 84200 },
+    "stats": { "appr": 42, "deny": 3, "vel": 0, "nap": 0, "lvl": 0 }
+  }
+}
 ```
 
 - `bat.mA` is omitted because the badge has no current sensor.
@@ -126,6 +143,26 @@ but isn't on screen yet). A and B pressed together send nothing.
   implemented; they are reported as 0, which means "no data".
 
 No `hello` message is sent. The reference doesn't define one.
+
+## Decisions
+
+Parts of the spec the badge deliberately doesn't use. Reopening one is
+a new decision, not a bug fix.
+
+- **No clock on screen.** The `time` sync is received and ignored.
+  A clock would take header space, and on e-ink it would only change
+  when something else refreshes the panel, so it would usually show
+  the wrong time.
+- **No folder push.** Pushes are never accepted. Each of `char_begin`,
+  `file`, `chunk`, `file_end` and `char_end` gets an `ok:false` ack,
+  following the spec's general rule that every command is acked. (The
+  spec's folder-push section instead suggests not acking `char_begin`
+  and letting Desktop time out.) How Desktop shows the refusal hasn't
+  been checked. Pushing a config file is deferred until later.
+- **Link encryption is its own work item.** Pairing, bonding and
+  `"sec": true` are blocked by the firmware today (see
+  [Transport](#transport)). When it becomes possible, it gets its own
+  change and pull request, separate from other protocol work.
 
 ## Timing
 

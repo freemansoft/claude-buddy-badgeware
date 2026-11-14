@@ -157,13 +157,13 @@ There is no creature or animation. Nothing on screen moves.
 
 ## Buttons
 
-| Button | Action |
-|---|---|
-| **A** | Accept: approve this tool call once (`"decision":"once"`) |
-| **B** | Deny (`"decision":"deny"`) |
-| **C** | Exit to the Badgeware menu |
-| **DOWN** / **UP** | Next / previous page of a long prompt or reply |
-| HOME | Exit to the menu (Badgeware default) |
+| Button            | Action                                                    |
+| ----------------- | --------------------------------------------------------- |
+| **A**             | Accept: approve this tool call once (`"decision":"once"`) |
+| **B**             | Deny (`"decision":"deny"`)                                |
+| **C**             | Exit to the Badgeware menu                                |
+| **DOWN** / **UP** | Next / previous page of a long prompt or reply            |
+| HOME              | Exit to the menu (Badgeware default)                      |
 
 A and B do nothing unless their labels are showing. UP and DOWN do
 nothing unless the page number is showing. Each prompt is answered
@@ -184,63 +184,24 @@ and when it can't ("Answer in the Claude App"). They stop as soon as
 the request is answered, on the badge or in the app. On battery they
 stay off to save charge. None of this causes an e-ink refresh.
 
-## Keeping e-ink flashing down
+## Power and screen refreshes
 
-Badgeware's Badger driver (SSD1680) currently does a full-screen 4-grey
-refresh on every update and ignores the speed setting. There is no
-partial refresh, so the app minimises the *number* of refreshes:
+How the app saves power, what changes between USB power and battery,
+and every timing constant are in [docs/power.md](docs/power.md). In
+short:
 
-1. **Only repaint on visible change.** The model reduces state to a
-   small tuple (name, status, kind, text…), and the panel refreshes
-   only when that tuple changes. Repeated heartbeats and the `status`
-   poll every ~2 s cause no refresh.
-2. **Battery and tokens ride along.** Their labels are redrawn whenever
-   the screen refreshes for another reason, but a change in them never
-   causes a refresh by itself.
-   - They can be a little out of date.
-   - Exceptions, which each refresh on their own:
-     - the battery dropping below 20% (with hysteresis), so a
-       low-battery warning appears even when nothing else is happening;
-     - plugging in or unplugging USB power. This is treated as urgent,
-       so it shows in about 0.3 s.
-   - The battery is sampled every 10 s, and the status reply sent to
-     Desktop reuses that reading.
-3. **Urgent vs status changes.**
-   - Urgent changes repaint after a 300 ms settle, which coalesces
-     bursts. These are: a new prompt, a connection change, the
-     stale-link warning.
-   - Status-only changes (summary, transcript lines, counts) are
-     coalesced and repaint **at most every 15 s**.
-4. **One refresh per answer.** After A/B, the app waits ~1 s so
-   Claude's follow-up heartbeat (prompt cleared) lands in the same
-   refresh as the result.
-5. **Non-blocking refresh.** Buttons and BLE are still serviced while
-   the panel updates.
-
-The thresholds are constants at the top of
-`apps/claude_buddy/__init__.py`.
-
-### Why the badge doesn't sleep between updates
-
-Badgeware's docs describe the usual Badger pattern as: draw, then
-`badge.sleep()` until a timer or button press. The stock apps do this
-through `wait_for_button_or_alarm()`, which sleeps after 5 s on battery.
-Claude Buddy deliberately calls neither:
-
-- **Sleep is a power-down.** RAM is lost and waking restarts
-  `main.py`. The Bluetooth radio is off while asleep, so the connection
-  to Claude Desktop drops. Desktop treats the device as gone after 30 s.
-- **Bluetooth can't wake the badge.** The only wake sources are a
-  button, an RTC alarm, the sleep timer, USB power, and RESET.
-- **Prompts arrive whenever Claude needs an answer, not on a
-  schedule.** A badge that woke every N seconds would miss prompts or
-  answer them late, and would have to reconnect each time.
-
-So while the app is open it stays awake and keeps the radio on. Its
-20 ms loop pause (`time.sleep_ms`) is a CPU idle, not deep sleep.
-Battery life is therefore much shorter than the "days on Badger"
-figure for apps that sleep. See [Roadmap](#roadmap) for planned power
-work.
+- **Few e-ink refreshes.** Every Badger refresh is a full-screen flash
+  of about 1–2 s, so the panel only refreshes when something you can
+  see changes. A new prompt shows after about 0.3 s. Status-only
+  changes (summary, transcript, counts) show at most every 15 s.
+  Battery and tokens update along with other refreshes, so they can
+  be a little out of date.
+- **No sleep while the app is open.** Sleeping would turn the radio
+  off and drop the link to Claude Desktop, and Bluetooth can't wake
+  the badge. Battery life is therefore much shorter than for Badgeware
+  apps that sleep. Exit the app (C) when you aren't using it.
+- **Case lights on USB power only.** The "Claude is waiting" blink is
+  off on battery.
 
 ## Install
 
@@ -320,6 +281,8 @@ apps/claude_buddy/        the Badgeware app (copied to the badge)
   buddy_lights.py         case-light blinks (pure Python)
   icon.png                24x24 menu icon (generated by tools/make_icon.py)
 docs/protocol.md          the protocol subset implemented, and decisions
+docs/power.md             power management: USB power vs battery
+docs/devices.md           Badger (e-ink) vs Tufty (LCD) display differences
 tests/                    host-side unit tests (CPython)
 tools/install.py          copy the app to the badge's USB drive
 tools/make_icon.py        regenerate icon.png (no dependencies)
@@ -345,6 +308,15 @@ tools/make_icon.py        regenerate icon.png (no dependencies)
 python3 -m unittest discover -s tests -v   # protocol, wrapping, paging, repaint policy, framing
 ruff check .                               # Pimoroni's lint rules
 pip install mpy-cross && mpy-cross apps/claude_buddy/buddy_model.py   # syntax check
+npx --yes prettier@3.9.10 --check "**/*.md"   # Markdown formatting
+```
+
+Markdown is formatted with prettier (pinned version, settings in
+`.prettierrc.json`). A pre-commit hook blocks commits whose staged
+`.md` files aren't formatted. Turn it on once per clone:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 `print()` output from the app (connects, disconnects, BLE errors) is
@@ -414,16 +386,19 @@ done.
       advertising and ready to reconnect. This comes from reading
       `main.py` and needs testing.
     - Sleep isn't possible while connected (see
-      [Why the badge doesn't sleep](#why-the-badge-doesnt-sleep-between-updates)).
+      [Why the badge never sleeps](docs/power.md#why-the-badge-never-sleeps)).
   - **Tufty backlight:** dim it when idle (the LCD is always on, so
     the backlight is likely its biggest draw), and use the front light
     sensor. In the Badger firmware `set_brightness()` is an empty stub,
     so check what the Tufty firmware provides
     ([pimoroni/tufty2350](https://github.com/pimoroni/tufty2350)).
 - **Later:**
-  - Show the time from Desktop's `time` sync.
   - Raise the BLE link security if a future Badgeware firmware enables
-    BTstack pairing/bonding.
+    BTstack pairing/bonding. This will be its own piece of work and
+    pull request.
+- **Not planned:** a clock on screen, and folder push (including a
+  pushed config file, which is deferred). See
+  [Decisions](docs/protocol.md#decisions).
 - **Ideas (unprioritized, low priority):**
   - **Battery icon instead of words.** The pixel fonts have no battery
     or charging symbols, so the header uses words (`75%`, `Charging`,
@@ -440,56 +415,15 @@ done.
 
 ### Phase 2 design: Tufty display switch
 
-The Tufty's colour LCD is always on and redraws without flashing. The
-Badger's e-ink rules exist to avoid refreshes, so on the Tufty they're
-only a cost: they make battery and tokens lag behind and throttle
-status updates. Phase 2 adds a **display profile** chosen from
-`badge.model`, and moves every refresh decision behind it.
+The Tufty has no display code yet. Its colour LCD is always on and
+redraws without flashing, so the Badger's e-ink rules (which exist to
+avoid refreshes) would only make it lag. Phase 2 adds a **display
+profile** chosen from `badge.model` and moves every refresh decision
+behind it.
 
-| | Badger (e-ink profile, today) | Tufty (LCD profile, phase 2) |
-|---|---|---|
-| What triggers a repaint | the screen key changes (`screen_key`: no battery or tokens) | **any** change, including battery and tokens |
-| Battery | 25% steps, rides along with other repaints | exact %, live |
-| Tokens today | rounded (`31k`), rides along | live, e.g. `31,204` |
-| Status changes | coalesced, at most every 15 s | immediate |
-| Settle delay | 300 ms (urgent), ~1 s after A/B | none, or one frame |
-| Present | `display.update()`, non-blocking, slow clean first refresh | `display.update()` every repaint |
-| Mode | `FAST_UPDATE \| NON_BLOCKING` | `HIRES` (320×240) |
-| Colours | black on white | light on dark, with optional accents |
-
-**Where the switch goes:**
-
-- `apps/claude_buddy/buddy_painter.py`: the repaint policy and paging
-  already live here, with `present`, `busy` and the timings passed in.
-  Phase 2 adds a profile argument that supplies:
-  - the key function: `screen_key` for e-ink, or the whole tuple for
-    the LCD;
-  - the timings: no status throttle on the LCD.
-
-  `apps/claude_buddy/__init__.py` picks the profile from `badge.model`.
-- `apps/claude_buddy/buddy_model.py`:
-  - the battery and token labels take a precision argument (rounded vs
-    exact);
-  - add more "live" fields if wanted, e.g. a clock from the `time`
-    sync, or "last update 5 s ago".
-
-  The model stays display-agnostic.
-- `apps/claude_buddy/buddy_view.py`:
-  - `Theme` already switches to light-on-dark for the Tufty;
-  - add accents, e.g. a coloured title when the `emphasis` flag is set
-    (the model already sets it for prompts);
-  - pick fonts sized for 320×240, likely larger than the Badger's.
-- Tests: run the painter policy tests under both profiles.
-
-**To check on the device:**
-
-- Does `badge.mode(HIRES)` give 320×240?
-- Are labels centred in thirds still above the A/B/C buttons?
-- How fast is a full redraw? This decides whether to draw only on
-  change (planned) or every frame.
-- What does the always-on display plus BLE draw from the battery?
-- **Open question:** should the Tufty get animation (e.g. a working
-  indicator)? The "no creature animation" rule was for e-ink.
+The full comparison of the two displays, the planned Tufty profile,
+where the code switches, and what to check on a Tufty are in
+[docs/devices.md](docs/devices.md).
 
 ## References
 
