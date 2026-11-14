@@ -6,6 +6,14 @@ Bluetooth LE with Claude Desktop on macOS or Windows, shows what Claude
 is doing, and lets you **accept** or **deny** permission prompts from
 the badge's buttons.
 
+> [!WARNING]
+> **No encrypted Bluetooth.** This project doesn't support encrypted
+> or paired BLE connections; the Badgeware firmware has no pairing
+> API. Anyone in radio range could read what Claude Desktop sends the
+> badge, including the commands waiting for approval, and any nearby
+> device could connect while the app runs. Approvals still need a
+> button press on the badge. See [Security](#security).
+
 - **Target:** Badger 2350 (264×176, 4-grey e-ink).
 - **Planned (phase 2):** Tufty 2350 (always-on colour LCD), with its own
   display profile for live updates. The layout and theme already adapt
@@ -15,11 +23,13 @@ the badge's buttons.
   from the badge's menu.
 - **License:** MIT.
 
-> **Status: phase 1, not yet tested on hardware.** The protocol logic,
-> text wrapping and BLE line framing are unit-tested on the host. All
-> device files compile with `mpy-cross` and pass Pimoroni's lint rules.
-> BLE behaviour and the on-screen layout still need a first run on a
-> real badge.
+> **Status: phase 1, running on a Badger 2350.** It connects to Claude
+> Desktop on macOS, shows Claude's status and the not-connected
+> screens, and answers short Bash permission prompts with A and B. Not
+> yet tried: Claude Desktop on Windows, power draw on battery, and the
+> Tufty 2350. On the host, the protocol logic, text wrapping and BLE
+> line framing are unit-tested, and all device files compile with
+> `mpy-cross` and pass Pimoroni's lint rules.
 
 ## Screen
 
