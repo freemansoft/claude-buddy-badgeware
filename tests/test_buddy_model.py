@@ -51,6 +51,10 @@ class ModelTest(unittest.TestCase):
     def connect(self, now=0):
         self.model.on_connect(now)
 
+    def answer(self, approve, now):
+        """A/B with the current prompt on the panel (see Painter)."""
+        return self.model.permission_message(approve, now, self.model.prompt_doc())
+
     # -- screens --------------------------------------------------------
 
     def test_pair_screen_before_connect(self):
@@ -97,13 +101,28 @@ class ModelTest(unittest.TestCase):
             ]}),
             50,
         )
-        self.model.handle_line(heartbeat(waiting=1, total=1), 100)
+        self.model.handle_line(heartbeat(waiting=1, total=1, msg="(called Bash)"), 100)
         scr = self.model.screen(100)
         self.assertEqual(scr[bm.S_KIND], bm.KIND_WAITING)
         self.assertTrue(scr[bm.S_EMPHASIS])
         self.assertFalse(scr[bm.S_ACTIONABLE])
         self.assertEqual(scr[bm.S_LINES], ((bm.WRAP, "Bash: make release"),))
-        self.assertEqual(scr[bm.S_TITLE], "working")  # Desktop's msg
+        self.assertEqual(scr[bm.S_TITLE], "(called Bash)")  # Desktop's msg
+
+    def test_waiting_hides_tool_that_msg_does_not_name(self):
+        # The Write turn event was over 4 KB and dropped by Desktop, so
+        # the last tool seen (Bash) isn't the one waiting.
+        self.connect()
+        self.model.handle_line(
+            line({"evt": "turn", "role": "assistant", "content": [
+                {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+            ]}),
+            50,
+        )
+        self.model.handle_line(heartbeat(waiting=1, total=1, msg="approve: Write"), 100)
+        scr = self.model.screen(100)
+        self.assertEqual(scr[bm.S_TITLE], "approve: Write")
+        self.assertEqual(scr[bm.S_LINES], ())
 
     def test_waiting_title_falls_back_without_msg(self):
         self.connect()
@@ -125,7 +144,7 @@ class ModelTest(unittest.TestCase):
         scr = self.model.screen(200)
         self.assertEqual(scr[bm.S_KIND], bm.KIND_PAIR)
         self.assertEqual(scr[bm.S_TITLE], "Disconnected")
-        self.assertIsNone(self.model.permission_message(True, 200))
+        self.assertIsNone(self.answer(True, 200))
 
     def test_header_always_shows_ble_identifier(self):
         # The header must match what Claude Desktop's picker lists, even
@@ -145,7 +164,7 @@ class ModelTest(unittest.TestCase):
     def test_accept_sends_once_and_records(self):
         self.connect()
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
-        msg = self.model.permission_message(True, 200)
+        msg = self.answer(True, 200)
         self.assertEqual(msg, {"cmd": "permission", "id": "req_1", "decision": "once"})
         self.model.record_decision(msg)
         self.assertEqual(self.store.data["appr"], 1)
@@ -155,12 +174,12 @@ class ModelTest(unittest.TestCase):
         self.assertFalse(scr[bm.S_ACTIONABLE])
         # No double answer while the same prompt is still listed.
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 200)
-        self.assertIsNone(self.model.permission_message(True, 200))
+        self.assertIsNone(self.answer(True, 200))
 
     def test_deny(self):
         self.connect()
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
-        msg = self.model.permission_message(False, 200)
+        msg = self.answer(False, 200)
         self.assertEqual(msg["decision"], "deny")
         self.model.record_decision(msg)
         self.assertEqual(self.store.data["deny"], 1)
@@ -169,16 +188,16 @@ class ModelTest(unittest.TestCase):
     def test_prompt_cleared_by_next_heartbeat(self):
         self.connect()
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
-        self.model.record_decision(self.model.permission_message(True, 200))
+        self.model.record_decision(self.answer(True, 200))
         self.model.handle_line(heartbeat(waiting=0), 300)
         self.assertEqual(self.model.screen(300)[bm.S_KIND], bm.KIND_STATUS)
 
     def test_new_prompt_after_answer_is_answerable(self):
         self.connect()
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
-        self.model.record_decision(self.model.permission_message(True, 200))
+        self.model.record_decision(self.answer(True, 200))
         self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, id="req_2")), 200)
-        self.assertEqual(self.model.permission_message(False, 200)["id"], "req_2")
+        self.assertEqual(self.answer(False, 200)["id"], "req_2")
 
     def test_stale_link_hides_accept_deny(self):
         self.connect(0)
@@ -188,16 +207,60 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(scr[bm.S_STATUS], "No data")
         self.assertEqual(scr[bm.S_KIND], bm.KIND_PROMPT)  # still shown
         self.assertFalse(scr[bm.S_ACTIONABLE])
-        self.assertIsNone(self.model.permission_message(True, late))
+        self.assertIsNone(self.answer(True, late))
         # A fresh heartbeat makes it answerable again.
         self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), late)
         self.assertTrue(self.model.screen(late)[bm.S_ACTIONABLE])
-        self.assertIsNotNone(self.model.permission_message(True, late))
+        self.assertIsNotNone(self.answer(True, late))
 
     def test_nothing_to_answer(self):
         self.connect()
         self.model.handle_line(heartbeat(), 100)
-        self.assertIsNone(self.model.permission_message(True, 200))
+        self.assertIsNone(self.answer(True, 200))
+
+    def test_only_the_prompt_on_screen_is_answered(self):
+        # Prompt req_1 is on the panel; req_2 arrives before it's drawn.
+        self.connect()
+        self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
+        shown = self.model.prompt_doc()
+        self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, id="req_2")), 200)
+        self.assertIsNone(self.model.permission_message(True, 300, shown))
+        self.assertIsNone(self.model.permission_message(True, 300, None))  # nothing shown
+        self.assertEqual(self.model.permission_message(True, 300, "p:req_2")["id"], "req_2")
+
+    def test_reconnect_forgets_old_waiting(self):
+        self.connect()
+        self.model.handle_line(heartbeat(waiting=1, total=1, msg="approve: Bash"), 100)
+        self.model.on_disconnect()
+        self.connect(200)
+        scr = self.model.screen(300)
+        self.assertEqual(scr[bm.S_KIND], bm.KIND_CONNECTED)  # not "approve: Bash"
+        self.assertEqual((self.model.waiting, self.model.msg), (0, ""))
+
+    def test_dead_link_after_timeout(self):
+        self.connect(0)
+        self.assertFalse(self.model.is_dead(bm.DEAD_LINK_MS))
+        self.assertTrue(self.model.is_dead(bm.DEAD_LINK_MS + 1))
+        self.model.handle_line(heartbeat(), bm.DEAD_LINK_MS + 1)  # any heartbeat revives
+        self.assertFalse(self.model.is_dead(bm.DEAD_LINK_MS + 2))
+        self.model.on_disconnect()
+        self.assertFalse(self.model.is_dead(10 * bm.DEAD_LINK_MS))
+
+    def test_silence_past_tick_wrap_is_stale_not_live(self):
+        # MicroPython ticks_diff goes negative after 2^29 ms; that must
+        # read as "a long time", not "Connected" again.
+        self.connect(0)
+        self.model.last_heartbeat_ms = 1000  # "later" than now after a wrap
+        self.assertTrue(self.model.is_stale(0))
+        self.assertTrue(self.model.is_dead(0))
+
+    def test_unknown_one_shot_does_not_clear_prompt(self):
+        self.connect()
+        self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
+        for msg in ({"foo": 1}, {"time": [1775731234, -25200]}, {"time": [1, 2], "x": 3}):
+            self.model.handle_line(line(msg), 150)
+            self.assertIsNotNone(self.model.prompt, msg)
+        self.assertEqual(self.answer(True, 200)["id"], "req_1")
 
     # -- commands -------------------------------------------------------
 
@@ -226,6 +289,22 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(self.store.data["owner"], "Felix")
         self.model.handle_line(line({"cmd": "owner", "owner": "Joe"}), 0)
         self.assertEqual(self.store.data["owner"], "Joe")
+
+    def test_name_and_owner_without_value_refused(self):
+        self.model.handle_line(line({"cmd": "name", "name": "Clawd"}), 0)
+        self.model.handle_line(line({"cmd": "owner", "name": "Felix"}), 0)
+        for cmd in ("name", "owner"):
+            (ack,) = self.model.handle_line(line({"cmd": cmd}), 0)
+            self.assertFalse(ack["ok"], cmd)
+        self.assertEqual(self.store.data["name"], "Clawd")
+        self.assertEqual(self.store.data["owner"], "Felix")
+
+    def test_unchanged_owner_not_saved_again(self):
+        self.model.handle_line(line({"cmd": "owner", "name": "Felix"}), 0)
+        saves = self.store.saves
+        (ack,) = self.model.handle_line(line({"cmd": "owner", "name": "Felix"}), 0)
+        self.assertTrue(ack["ok"])
+        self.assertEqual(self.store.saves, saves)  # every connect sends it
 
     def test_character_push_refused(self):
         (ack,) = self.model.handle_line(line({"cmd": "char_begin", "name": "bufo", "total": 10}), 0)

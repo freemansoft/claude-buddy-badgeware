@@ -50,7 +50,8 @@ ELLIPSIS = "..."
 # Upper bound on wrapped lines for one item (a 3,000-character reply is
 # well under this); only stops pathological input.
 MAX_WRAP_LINES = 400
-PAGE_HINT = "UP/DOWN"
+# Shorter count labels for the bottom row when the full ones don't fit.
+_SHORT_LABELS = ((" running", " run"), (" waiting", " wait"))
 # Footer text in place of A/B when Claude waits for an approval the
 # badge can't answer (163 px in nope; 188 px fit before "C: Exit").
 APP_ONLY_NOTE = "Answer in the Claude App"
@@ -278,12 +279,15 @@ class BuddyView:
         """Wrap the title and body once per content change, then split
         the body rows into pages.
 
-        Returns (title_lines, body_top, pages). Each page is a list of
-        rows: (text, is_counts), or None for the small gap between
-        items. The title repeats on every page so a later page of a
-        prompt still says what it is for. When there is more than one
-        page, the last row of the content area is kept for the page
-        marker.
+        Returns (title_lines, body_top, pages, counts). Each page is a
+        list of text rows, or None for the small gap between items. The
+        title repeats on every page so a later page of a prompt still
+        says what it is for.
+
+        The counts line ("1 running, 0 waiting") isn't part of the body:
+        it goes on the bottom row of every page, with the page marker on
+        the right (see _draw_bottom_row). That row is kept free whenever
+        there are counts (status screen) or more than one page.
         """
         key = (title, lines)
         if key == self._layout_key:
@@ -297,24 +301,25 @@ class BuddyView:
 
         screen.font = self.f_body
         rows = []
+        counts = None
         for mode, text in lines:
             if not text:
                 continue
+            if mode == COUNTS:
+                counts = text
+                continue
             if rows:
                 rows.append(None)
-            if mode == COUNTS:
-                rows.append((text, True))  # tokens appended at draw time
-            else:
-                max_lines = MAX_WRAP_LINES if mode == WRAP else 1
-                for line in self.wrap(text, self.body_w, max_lines):
-                    rows.append((line, False))
+            max_lines = MAX_WRAP_LINES if mode == WRAP else 1
+            rows.extend(self.wrap(text, self.body_w, max_lines))
 
-        pages = self._paginate(rows, top, self.body_bottom)
-        if len(pages) > 1:
-            pages = self._paginate(rows, top, self.body_bottom - self.h_body)
+        bottom = self.body_bottom - self.h_body
+        pages = self._paginate(rows, top, bottom if counts else self.body_bottom)
+        if len(pages) > 1 and not counts:
+            pages = self._paginate(rows, top, bottom)
 
         self._layout_key = key
-        self._layout_value = (title_lines, top, pages)
+        self._layout_value = (title_lines, top, pages, counts)
         return self._layout_value
 
     def _paginate(self, rows, top, bottom):
@@ -338,7 +343,7 @@ class BuddyView:
 
     def _draw_body(self, title, lines, tokens, page):
         screen.pen = self.theme.fg
-        title_lines, top, pages = self._layout(title, lines)
+        title_lines, top, pages, counts = self._layout(title, lines)
         page = max(0, min(page, len(pages) - 1))
 
         screen.font = self.f_title
@@ -353,15 +358,30 @@ class BuddyView:
             if row is None:
                 y += LINE_GAP
                 continue
-            text, is_counts = row
-            if is_counts and tokens:
-                fitted = self.wrap(text + ", " + tokens, self.body_w, 1)
-                text = fitted[0] if fitted else text
-            self._text(text, self.body_x, y)
+            self._text(row, self.body_x, y)
             y += self.h_body
 
-        if len(pages) > 1:
-            y = self.body_bottom - self.h_body + 1
-            marker = "{}/{}".format(page + 1, len(pages))
-            self._text(PAGE_HINT, self.body_x, y)
-            self._text(marker, self.body_x + self.body_w - self._width(marker), y)
+        marker = "{}/{}".format(page + 1, len(pages)) if len(pages) > 1 else ""
+        self._draw_bottom_row(counts, tokens, marker)
+
+    def _draw_bottom_row(self, counts, tokens, marker):
+        """Counts (and today's tokens) on the left, page marker on the
+        right. The counts give way to the marker: full labels, then
+        "run"/"wait", then cut with "..."."""
+        if not counts and not marker:
+            return
+        y = self.body_bottom - self.h_body + 1
+        room = self.body_w
+        if marker:
+            mw = self._width(marker)
+            self._text(marker, self.body_x + self.body_w - mw, y)
+            room -= mw + HEADER_GAP
+        if not counts:
+            return
+        text = counts + (", " + tokens if tokens else "")
+        if self._width(text) > room:
+            for full, short in _SHORT_LABELS:
+                text = text.replace(full, short)
+        fitted = self.wrap(text, max(room, 0), 1)
+        if fitted:
+            self._text(fitted[0], self.body_x, y)

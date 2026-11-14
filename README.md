@@ -36,17 +36,18 @@ the badge's buttons.
 ```
 
 When nothing needs an answer, the content area shows status instead:
-today's tokens on the counts line, then Claude's latest reply. The
-Accept and Deny labels disappear. Content longer than the screen is
-split into pages; the bottom row shows `UP/DOWN` and the page number:
+Claude's latest reply, with the session counts and today's tokens on
+the bottom row. The Accept and Deny labels disappear. Content longer
+than the screen is split into pages, and the page number goes on the
+right of the bottom row:
 
 ```text
 | Done                                     |
-| 0 running, 0 waiting, 31k today          |
 | Claude: I renamed old_name to new_name   |
 | in 4 files.                              |
 | All 80 tests pass. The BLE module now... |
-| UP/DOWN                              1/2 |
+| also drops a link that has gone quiet.   |
+| 0 running, 0 waiting, 31k today      1/2 |
 +------------------------------------------+
 |                                 C: Exit  |
 +------------------------------------------+
@@ -70,7 +71,10 @@ split into pages; the bottom row shows `UP/DOWN` and the page number:
     - below 20% it switches to 5% steps, and stays "low" until the
       reading is back to 25%.
   - **Link status:** `Not connected`, `Connected`, or `No data`
-    (connected, but no heartbeat for 30 s).
+    (connected, but no heartbeat for 30 s). After 60 s with no
+    heartbeat the badge drops the link and advertises again, so a
+    silent connection (a phone's BLE scanner, another Mac) can't keep
+    Claude Desktop out of the badge's only connection slot.
 - **Content:** the latest message from Claude, always in black, using
   the bold `nope` pixel font (the same font as the header and footer).
   - **Needs you:**
@@ -83,7 +87,10 @@ split into pages; the bottom row shows `UP/DOWN` and the page number:
   - **Status:**
     - Claude's one-line summary (the title);
     - session counts with today's output tokens (`31k today`, from the
-      heartbeat's `tokens_today`);
+      heartbeat's `tokens_today`), on the bottom row of every page.
+      When they don't fit next to the page number they become
+      `12 run, 3 wait, 1.2M today`, and are cut with `...` as a last
+      resort. The page number is never dropped;
     - **Claude's latest reply**, starting `Claude:`:
       - the text of the last assistant turn Desktop sent;
       - simple markdown (`**`, backticks, `#` headings, code fences)
@@ -98,8 +105,8 @@ split into pages; the bottom row shows `UP/DOWN` and the page number:
     - A prompt shows its full command or path, up to 2,000 characters,
       with the command's own line breaks kept. You can read all of it
       before pressing Accept.
-    - The title repeats on every page. The bottom row shows `UP/DOWN`
-      and `2/3`.
+    - The title repeats on every page. The page number (`2/3`) is on
+      the right of the bottom row.
     - The view jumps back to page 1 when a new prompt or a new reply
       arrives. Routine status updates leave you on the page you're
       reading.
@@ -144,9 +151,15 @@ There is no creature or animation. Nothing on screen moves.
 | HOME | Exit to the menu (Badgeware default) |
 
 A and B do nothing unless their labels are showing. UP and DOWN do
-nothing unless the page marker is showing. Each prompt is answered
+nothing unless the page number is showing. Each prompt is answered
 at most once. A press blinks the case lights, so you get feedback
 straight away without an extra e-ink refresh.
+
+A and B only ever answer the prompt that is on the panel. If a newer
+prompt arrives while the old one is still showing, or while the panel
+is redrawing, a press does nothing until the new one has been drawn,
+so you can't approve a command you haven't seen. Pressing A and B
+together also does nothing.
 
 ### Case lights while Claude waits
 

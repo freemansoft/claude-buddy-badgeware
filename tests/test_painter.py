@@ -105,6 +105,37 @@ class PainterTest(unittest.TestCase):
         self.assertTrue(self.tick(1000 + SETTLE))
         self.assertEqual(self.presented, 2)
 
+    def test_answerable_doc_only_once_prompt_is_on_panel(self):
+        r1 = {"id": "r1", "tool": "Bash", "hint": "ls"}
+        self.tick(0)
+        self.tick(SETTLE)
+        self.assertIsNone(self.painter.answerable_doc())  # status screen
+        self.heartbeat(1000, waiting=1, prompt=r1)
+        self.tick(1000)
+        self.assertIsNone(self.painter.answerable_doc())  # not drawn yet
+        self.tick(1000 + SETTLE)
+        self.assertEqual(self.painter.answerable_doc(), "p:r1")
+        self.busy = True
+        self.assertIsNone(self.painter.answerable_doc())  # mid-refresh
+        self.busy = False
+        # A newer prompt arrives: the panel still shows r1, so A/B
+        # can't answer r2 until it's drawn (BuddyModel refuses).
+        self.heartbeat(2000, waiting=1, prompt=dict(r1, id="r2"))
+        self.assertEqual(self.painter.answerable_doc(), "p:r1")
+        self.assertIsNone(
+            self.model.permission_message(True, 2000, self.painter.answerable_doc())
+        )
+
+    def test_no_throttle_after_ticks_wrap(self):
+        self.tick(0)
+        self.tick(SETTLE)
+        # After ~6 days without a paint, ticks_diff(now, last) goes
+        # negative on MicroPython; that must not defer the repaint.
+        self.painter.last_paint_ms = 10**9
+        self.heartbeat(1000, msg="b")
+        self.tick(1000)
+        self.assertTrue(self.tick(1000 + SETTLE))
+
     def test_battery_and_tokens_ride_along(self):
         self.tick(0)
         self.tick(SETTLE)

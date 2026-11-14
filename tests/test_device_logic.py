@@ -242,7 +242,7 @@ class PagingTest(unittest.TestCase):
     def test_short_content_is_one_page_without_marker(self):
         scr = make_scr(kind="prompt", lines=(("w", "ls -la"),), actionable=True)
         self.assertEqual(self.view.page_count(scr), 1)
-        self.assertNotIn(buddy_view.PAGE_HINT, self.body_texts(scr, 0))
+        self.assertNotIn("1/1", self.body_texts(scr, 0))
 
     def test_long_prompt_pages_show_everything_once(self):
         scr = make_scr(kind="prompt", lines=(("w", LONG),), actionable=True)
@@ -253,7 +253,7 @@ class PagingTest(unittest.TestCase):
             texts = self.body_texts(scr, page)
             self.assertIn("Allow Bash?", texts)  # title on every page
             self.assertIn("{}/{}".format(page + 1, pages), texts)
-            self.assertIn(buddy_view.PAGE_HINT, texts)
+            self.assertNotIn("UP/DOWN", texts)  # the marker is enough
             seen += [w for t in texts for w in t.split() if w.startswith("word")]
         self.assertEqual(seen, LONG.split())  # nothing lost or repeated
 
@@ -271,6 +271,55 @@ class PagingTest(unittest.TestCase):
         last = self.view.page_count(scr)
         texts = self.body_texts(scr, 99)
         self.assertIn("{}/{}".format(last, last), texts)
+
+    # -- counts on the bottom row ------------------------------------------
+
+    def drawn_at(self, scr, page):
+        self.view.draw(scr, page)
+        return {t: (x, y) for t, x, y in screen.drawn}
+
+    def bottom_y(self):
+        return self.view.body_bottom - self.view.h_body + 1
+
+    def test_counts_on_bottom_row_of_every_page(self):
+        scr = make_scr(lines=(("c", "1 running, 0 waiting"), ("w", "Claude: " + LONG)),
+                       tokens="31k today")
+        pages = self.view.page_count(scr)
+        self.assertGreater(pages, 1)
+        for page in range(pages):
+            drawn = self.drawn_at(scr, page)
+            marker = "{}/{}".format(page + 1, pages)
+            self.assertEqual(drawn["1 running, 0 waiting, 31k today"], (4, self.bottom_y()))
+            self.assertEqual(drawn[marker][1], self.bottom_y())
+            for text, (_, y) in drawn.items():
+                if text.startswith("word") or text.startswith("Claude:"):
+                    self.assertLess(y, self.bottom_y())  # body stays above
+
+    def test_counts_reserved_even_on_one_page(self):
+        scr = make_scr(lines=(("c", "0 running, 0 waiting"),))
+        drawn = self.drawn_at(scr, 0)
+        self.assertEqual(drawn["0 running, 0 waiting"][1], self.bottom_y())
+        self.assertFalse(any("/" in t and t[0].isdigit() for t in drawn))  # no marker
+
+    def test_counts_use_short_labels_when_tight(self):
+        # Body is 42 chars wide; with the "1/3" marker the counts get 38.
+        # Full labels need 40 here, so they switch to run/wait.
+        lines = (("c", "12345 running, 67890 waiting"), ("w", "Claude: " + LONG))
+        scr = make_scr(lines=lines, tokens="1.2M today")
+        drawn = self.drawn_at(scr, 0)
+        self.assertIn("12345 run, 67890 wait, 1.2M today", drawn)
+        self.assertIn("1/{}".format(self.view.page_count(scr)), drawn)
+
+    def test_counts_cut_but_marker_kept(self):
+        lines = (("c", "1234567890 running, 1234567890 waiting"), ("w", "Claude: " + LONG))
+        scr = make_scr(lines=lines, tokens="999M today")
+        drawn = self.drawn_at(scr, 0)
+        marker = "1/{}".format(self.view.page_count(scr))
+        self.assertIn(marker, drawn)
+        (counts,) = [t for t in drawn if t.startswith("1234567890")]
+        self.assertIn(" run,", counts)  # shortened first, then cut
+        self.assertTrue(counts.endswith("..."))
+        self.assertLess(drawn[counts][0] + len(counts) * CHAR_W, drawn[marker][0])
 
 
 class FramingTest(unittest.TestCase):
@@ -316,6 +365,35 @@ class FramingTest(unittest.TestCase):
         self.ble._q.append(("connect", None))
         out = self.feed(b"fresh\n")
         self.assertEqual(out, [("connect", None), ("line", b"fresh")])
+
+
+class DropTest(unittest.TestCase):
+    """Dropping a dead or silent link (BuddyBLE.drop)."""
+
+    def setUp(self):
+        self.ble = buddy_ble.BuddyBLE()
+        self.disconnects = []
+        self.ble._ble.gap_disconnect = self.disconnects.append
+        # CPython's time has no ticks_*.
+        self.real_time = buddy_ble.time
+        buddy_ble.time = types.SimpleNamespace(
+            ticks_diff=lambda a, b: a - b, ticks_add=lambda a, b: a + b
+        )
+
+    def tearDown(self):
+        buddy_ble.time = self.real_time
+
+    def test_drop_only_when_connected_and_rate_limited(self):
+        self.assertFalse(self.ble.drop(0))  # nothing to drop
+        self.ble._irq(buddy_ble._IRQ_CENTRAL_CONNECT, (7, 0, b""))
+        self.assertTrue(self.ble.drop(0))
+        self.assertEqual(self.disconnects, [7])
+        self.assertFalse(self.ble.drop(buddy_ble._DROP_RETRY_MS - 1))
+        self.assertTrue(self.ble.drop(buddy_ble._DROP_RETRY_MS))  # retry
+        self.assertTrue(self.ble.drop(-1))  # ticks wrapped: retry, don't stall
+        self.ble._irq(buddy_ble._IRQ_CENTRAL_DISCONNECT, (7, 0, b""))
+        self.assertFalse(self.ble.drop(10**6))
+        self.assertEqual(len(self.disconnects), 3)
 
 
 if __name__ == "__main__":

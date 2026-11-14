@@ -22,7 +22,7 @@ Phase 2 (Tufty LCD) will pass a different profile: no status throttle,
 and a key function that includes the passengers.
 """
 
-from buddy_model import S_DOC, is_urgent, screen_key
+from buddy_model import S_ACTIONABLE, S_DOC, is_urgent, screen_key
 
 try:  # MicroPython
     from time import ticks_add, ticks_diff
@@ -56,6 +56,19 @@ class Painter:
     def hold(self, now, ms):
         self.hold_until_ms = ticks_add(now, ms)
         self.first_diff_ms = None
+
+    def answerable_doc(self):
+        """S_DOC of the prompt the user can see with A/B showing, or None.
+
+        None while nothing answerable is on the panel or a refresh is
+        still in progress (the old screen is what the user is looking
+        at). A/B must only answer this prompt; see
+        BuddyModel.permission_message.
+        """
+        scr = self.shown_scr
+        if scr is None or not scr[S_ACTIONABLE] or self._busy():
+            return None
+        return scr[S_DOC]
 
     def turn(self, scr, delta):
         """Move ``delta`` pages; returns True if the page changed."""
@@ -91,9 +104,13 @@ class Painter:
             and not is_urgent(scr, self.shown_scr)
             and self.last_paint_ms is not None
         ):
-            throttle = ticks_add(self.last_paint_ms, self.status_interval_ms)
-            if ticks_diff(throttle, due) > 0:
-                due = throttle
+            # A negative difference means the ticks wrapped (MicroPython,
+            # after ~6 days without a paint): long enough, no throttle.
+            since = ticks_diff(now, self.last_paint_ms)
+            if 0 <= since < self.status_interval_ms:
+                throttle = ticks_add(self.last_paint_ms, self.status_interval_ms)
+                if ticks_diff(throttle, due) > 0:
+                    due = throttle
         if ticks_diff(now, due) < 0 or self._busy():
             return False
 

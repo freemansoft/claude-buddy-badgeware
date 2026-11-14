@@ -51,6 +51,7 @@ _ADV_NAME_COMPLETE = const(0x09)
 _NAME_PREFIX = "Claude"
 _ADV_INTERVAL_US = const(100000)
 _ADV_RETRY_MS = const(2000)
+_DROP_RETRY_MS = const(5000)
 
 _PREFERRED_MTU = const(247)
 _DEFAULT_MTU = const(23)
@@ -124,6 +125,8 @@ class BuddyBLE:
         self._skipping = False
         self._advertising = False
         self._next_adv_ms = None
+        # Retry gate for drop(): when the last disconnect was asked for.
+        self._drop_ms = None
 
         self._ble.irq(self._irq)
         self._advertise()
@@ -135,6 +138,7 @@ class BuddyBLE:
             self._conn = data[0]
             self._mtu = _DEFAULT_MTU
             self._advertising = False
+            self._drop_ms = None
             self._q.append(("connect", None))
         elif event == _IRQ_CENTRAL_DISCONNECT:
             if data[0] == self._conn:
@@ -181,6 +185,24 @@ class BuddyBLE:
             return
         if not self._advertise():
             self._next_adv_ms = time.ticks_add(now_ms, _ADV_RETRY_MS)
+
+    def drop(self, now_ms):
+        """Disconnect the current central (a dead or silent link). The
+        disconnect IRQ then restarts advertising via service(). Asks at
+        most every _DROP_RETRY_MS. Returns True if it asked now."""
+        conn = self._conn
+        if conn is None:
+            return False
+        if self._drop_ms is not None:
+            since = time.ticks_diff(now_ms, self._drop_ms)
+            if 0 <= since < _DROP_RETRY_MS:  # negative: ticks wrapped, retry
+                return False
+        self._drop_ms = now_ms
+        try:
+            self._ble.gap_disconnect(conn)
+        except OSError as e:
+            print("buddy_ble: disconnect failed:", e)
+        return True
 
     def send(self, obj):
         """Send one JSON object as a line. Returns True if queued."""

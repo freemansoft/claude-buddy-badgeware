@@ -52,12 +52,13 @@ by `\n`, sent in either direction.
 
 | Message | Handling |
 |---|---|
-| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) on the status counts line, but never triggers a refresh by itself. `tokens` is ignored. |
-| `{"evt":"turn", ...}` | Assistant turns: the `text` blocks become **Claude's latest reply** on the status screen. Simple markdown is stripped; it's capped at 3,000 characters and 40 paragraphs, and paged with UP/DOWN. A turn with no text (tool calls only) keeps the previous reply. The last `tool_use` name and a one-line summary are also kept; they're shown only when Desktop reports `waiting` without a `prompt` and a single session is open. User turns are ignored. |
+| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) with the session counts on the bottom row of the status screen, but never triggers a refresh by itself. `tokens` is ignored. |
+| `{"evt":"turn", ...}` | Assistant turns: the `text` blocks become **Claude's latest reply** on the status screen. Simple markdown is stripped; it's capped at 3,000 characters and 40 paragraphs, and paged with UP/DOWN. A turn with no text (tool calls only) keeps the previous reply. The last `tool_use` name and a one-line summary are also kept; they're shown only when Desktop reports `waiting` without a `prompt`, a single session is open, and Desktop's `msg` names that tool (Desktop drops turn events over 4 KB, so the last tool seen may not be the one waiting). User turns are ignored. |
 | `{"time":[epoch, tz_offset]}` | Ignored (no clock on screen yet). |
+| Anything else without `cmd` or `evt` | Treated as a heartbeat only if it has at least one heartbeat field (`total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, `prompt`). Otherwise ignored, so an unknown one-shot message can't clear a pending prompt. |
 | `{"cmd":"status"}` | Replies with the status ack (below). |
-| `{"cmd":"name","name":...}` | Saved and reported back as `data.name` in the status ack. Ack `{"ack":"name","ok":true,"n":0}`. The advertised BLE name doesn't change, and the header keeps showing it so it matches the picker. |
-| `{"cmd":"owner","name":...}` | Saved (also accepts an `owner` key). Ack `ok:true`. |
+| `{"cmd":"name","name":...}` | Saved and reported back as `data.name` in the status ack. Ack `{"ack":"name","ok":true,"n":0}`. The advertised BLE name doesn't change, and the header keeps showing it so it matches the picker. Without a `name` string: ack `ok:false` and the saved name is kept. |
+| `{"cmd":"owner","name":...}` | Saved (also accepts an `owner` key). Ack `ok:true`. Without a value: ack `ok:false` and the saved owner is kept. Flash is only written when the value changes (Desktop sends it on every connect). |
 | `{"cmd":"unpair"}` | Ack `ok:true`. There are no bonds to erase on this firmware. |
 | `char_begin` / `file` / `chunk` / `file_end` / `char_end` | Ack `ok:false`, `"error":"not supported"`. |
 | Anything else with `cmd` | Ack `ok:false`, `"error":"unknown command"`. |
@@ -69,7 +70,9 @@ by `\n`, sent in either direction.
 {"cmd":"permission","id":"<prompt.id>","decision":"deny"}
 ```
 
-Sent on A (`once`) or B (`deny`), at most once per prompt id.
+Sent on A (`once`) or B (`deny`), at most once per prompt id, and only
+for the prompt currently drawn on the panel (not one that has arrived
+but isn't on screen yet). A and B pressed together send nothing.
 
 ```json
 {"ack":"status","ok":true,"data":{
@@ -94,5 +97,11 @@ No `hello` message is sent. The reference doesn't define one.
 - Desktop sends a heartbeat on every change, plus one every 10 s.
 - After 30 s with no heartbeat while connected, the header shows
   **No data**.
+- After 60 s with no heartbeat, the badge disconnects and advertises
+  again. Session counts, summary, transcript lines and any pending
+  prompt are cleared on every connect and disconnect; Claude's last
+  reply and today's tokens are kept.
+- In practice Desktop sends heartbeats much more often than the
+  10 s minimum: every 70–200 ms, almost all identical.
 - Desktop polls `status` every couple of seconds. Status replies never
   cause a screen refresh.

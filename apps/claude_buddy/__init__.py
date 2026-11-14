@@ -172,6 +172,7 @@ lights = CaseLights(
 )
 
 _started_ms = time.ticks_ms()
+_buttons_armed = False
 _next_battery_ms = _started_ms
 
 
@@ -198,6 +199,7 @@ def _poll_battery(now):
 
 
 def update():
+    global _buttons_armed
     badge.poll()
     now = time.ticks_ms()
     _poll_battery(now)
@@ -215,15 +217,25 @@ def update():
             model.on_disconnect()
             rx_log.note(now, "--", "disconnect")
             print("claude_buddy: disconnected")
+    if model.is_dead(now) and ble.drop(now):
+        rx_log.note(now, "--", "no heartbeat, dropping link")
+        print("claude_buddy: no heartbeat, dropping link")
     ble.service(now)
     rx_log.service(now)
 
-    if time.ticks_diff(now, _started_ms) >= STARTUP_IGNORE_MS:
+    if not _buttons_armed:
+        # Latched once: comparing against _started_ms forever would turn
+        # the buttons off again when the ticks wrap (~6 days).
+        _buttons_armed = time.ticks_diff(now, _started_ms) >= STARTUP_IGNORE_MS
+    if _buttons_armed:
         if badge.pressed(BUTTON_C):
             return True  # leave run(); Badgeware resets into the menu
         approve = badge.pressed(BUTTON_A)
-        if approve or badge.pressed(BUTTON_B):
-            message = model.permission_message(approve, now)
+        deny = badge.pressed(BUTTON_B)
+        # A and B together is ambiguous: answer nothing.
+        if approve != deny:
+            # Only the prompt actually on the panel can be answered.
+            message = model.permission_message(approve, now, painter.answerable_doc())
             if message is not None and ble.send(message):
                 rx_log.note(now, "TX", message)
                 model.record_decision(message)
@@ -231,9 +243,12 @@ def update():
                 painter.hold(now, ANSWER_SETTLE_MS)
 
     scr = model.screen(now)
-    # Waiting for an answer (badge prompt or "Answer in the Claude App"):
-    # double blink, but only on USB power.
-    lights.tick(now, scr[S_KIND] in ATTENTION_KINDS and model.on_usb)
+    # Waiting for an answer (badge prompt or "Answer in the Claude App")
+    # on a live link: double blink, but only on USB power.
+    lights.tick(
+        now,
+        scr[S_KIND] in ATTENTION_KINDS and model.on_usb and not model.is_stale(now),
+    )
     if badge.pressed(BUTTON_DOWN):
         painter.turn(scr, 1)
     elif badge.pressed(BUTTON_UP):

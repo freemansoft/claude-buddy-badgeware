@@ -24,8 +24,12 @@ except ImportError:  # CPython (tests): plain integer milliseconds
 
 
 # Claude Desktop sends a heartbeat at least every 10 s; 30 s of silence
-# means the link is dead (per the reference).
+# means the link is dead (per the reference). The header says "No data"
+# from HEARTBEAT_TIMEOUT_MS; at DEAD_LINK_MS the app drops the link and
+# advertises again, so a silent central (a scanner, another Mac) can't
+# hold the badge's only connection slot.
 HEARTBEAT_TIMEOUT_MS = 30000
+DEAD_LINK_MS = 60000
 
 # Caps on strings kept from the host. The display can't show more than
 # this anyway, and it bounds memory use on the badge.
@@ -51,7 +55,8 @@ KIND_WAITING = "waiting"
 ATTENTION_KINDS = (KIND_PROMPT, KIND_WAITING)
 
 # Body line modes: wrap over as many lines as fit, one line only, or the
-# status counts line (one line, with today's tokens appended).
+# status counts line (drawn on the bottom row of every page, next to the
+# page marker, with today's tokens appended).
 WRAP = "w"
 SINGLE = "s"
 COUNTS = "c"
@@ -98,6 +103,20 @@ _TOOL_SUMMARY_KEYS = (
 )
 
 _UNSUPPORTED_CMDS = ("char_begin", "file", "chunk", "file_end", "char_end")
+
+# A line is a heartbeat only if it carries at least one of these. Other
+# one-shot messages (time sync, anything added later) must not clear
+# the pending prompt the way a heartbeat without "prompt" does.
+_HEARTBEAT_KEYS = (
+    "total",
+    "running",
+    "waiting",
+    "msg",
+    "entries",
+    "tokens",
+    "tokens_today",
+    "prompt",
+)
 
 
 def _to_int(value, default=0):
@@ -245,18 +264,41 @@ class BuddyModel:
         # Give the host a full timeout window before calling it stale.
         self.last_heartbeat_ms = now_ms
         self.heartbeat_seen = False
-        self.prompt = None
-        self.answered = None
+        self._clear_activity()
 
     def on_disconnect(self):
         self.connected = False
+        self._clear_activity()
+
+    def _clear_activity(self):
+        """Forget the last link's live state, so a reconnect doesn't show
+        (or blink for) a request from before. Claude's last reply and
+        today's tokens stay: they're history, not live state."""
+        self.total = 0
+        self.running = 0
+        self.waiting = 0
+        self.msg = ""
+        self.entries = ()
+        self.last_tool = None
         self.prompt = None
         self.answered = None
+
+    def _silence_ms(self, now_ms):
+        """Time since the last heartbeat. MicroPython ticks wrap, so a
+        negative difference means "longer than ticks_diff can say"."""
+        since = ticks_diff(now_ms, self.last_heartbeat_ms)
+        return since if since >= 0 else DEAD_LINK_MS + 1
 
     def is_stale(self, now_ms):
         if not self.connected or self.last_heartbeat_ms is None:
             return False
-        return ticks_diff(now_ms, self.last_heartbeat_ms) > HEARTBEAT_TIMEOUT_MS
+        return self._silence_ms(now_ms) > HEARTBEAT_TIMEOUT_MS
+
+    def is_dead(self, now_ms):
+        """No heartbeat for DEAD_LINK_MS: time to drop the link."""
+        if not self.connected or self.last_heartbeat_ms is None:
+            return False
+        return self._silence_ms(now_ms) > DEAD_LINK_MS
 
     # -- inbound --------------------------------------------------------
 
@@ -284,8 +326,8 @@ class BuddyModel:
         if "evt" in msg:
             self._event(msg)
             return []
-        if "time" in msg and len(msg) == 1:
-            # Time sync; not used yet (no clock on screen).
+        # Time sync ({"time": [...]}) and unknown one-shots are ignored.
+        if not any(key in msg for key in _HEARTBEAT_KEYS):
             return []
         self._heartbeat(msg, now_ms)
         return []
@@ -373,21 +415,28 @@ class BuddyModel:
         if cmd == "status":
             return [self._status_ack()]
         if cmd == "name":
-            name = _one_line(_to_str(msg.get("name"), MAX_NAME))
-            self.settings["name"] = name
-            self._save()
-            return [{"ack": "name", "ok": True, "n": 0}]
+            return [self._set_setting("name", msg.get("name"))]
         if cmd == "owner":
-            owner = msg.get("name", msg.get("owner"))
-            self.settings["owner"] = _one_line(_to_str(owner, MAX_NAME))
-            self._save()
-            return [{"ack": "owner", "ok": True, "n": 0}]
+            return [self._set_setting("owner", msg.get("name", msg.get("owner")))]
         if cmd == "unpair":
             # This firmware can't bond, so there are no keys to erase.
             return [{"ack": "unpair", "ok": True, "n": 0}]
         if cmd in _UNSUPPORTED_CMDS:
             return [{"ack": cmd, "ok": False, "n": 0, "error": "not supported"}]
         return [{"ack": cmd, "ok": False, "n": 0, "error": "unknown command"}]
+
+    def _set_setting(self, key, value):
+        """Store a name/owner. A missing value is refused (ok: false, as
+        the reference does) instead of erasing the saved one. Flash is
+        only written when the value changes; Desktop sends owner on
+        every connect."""
+        if not isinstance(value, str):
+            return {"ack": key, "ok": False, "n": 0, "error": "missing name"}
+        value = _one_line(_to_str(value, MAX_NAME))
+        if value != self.settings.get(key):
+            self.settings[key] = value
+            self._save()
+        return {"ack": key, "ok": True, "n": 0}
 
     def _status_ack(self):
         data = {
@@ -424,12 +473,20 @@ class BuddyModel:
             and not self.is_stale(now_ms)
         )
 
-    def permission_message(self, approve, now_ms):
+    def prompt_doc(self):
+        """The S_DOC value of the pending prompt's screen, or None."""
+        return None if self.prompt is None else "p:" + self.prompt[0]
+
+    def permission_message(self, approve, now_ms, shown_doc):
         """The permission message for the pending prompt, or None.
+
+        ``shown_doc`` is the S_DOC of the answerable prompt actually on
+        the panel (Painter.answerable_doc). A/B only answer that prompt:
+        a newer one that hasn't been drawn yet is never approved unseen.
 
         Does not change state; call ``record_decision`` once it is sent.
         """
-        if not self.can_answer(now_ms):
+        if not self.can_answer(now_ms) or shown_doc != self.prompt_doc():
             return None
         return {
             "cmd": "permission",
@@ -504,7 +561,7 @@ class BuddyModel:
         base = self._screen(now_ms)
         kind = base[S_KIND]
         if kind in (KIND_PROMPT, KIND_ANSWERED) and self.prompt is not None:
-            doc = "p:" + self.prompt[0]
+            doc = self.prompt_doc()
         elif kind == KIND_STATUS:
             doc = "r:{}".format(self.reply_seq)
         else:
@@ -564,7 +621,12 @@ class BuddyModel:
                 lines.append((SINGLE, "{} sessions waiting".format(self.waiting)))
             elif self.total <= 1 and self.last_tool is not None:
                 tool, summary = self.last_tool
-                lines.append((WRAP, tool + ": " + summary if summary else tool))
+                # Desktop drops turn events over 4 KB, so the last tool
+                # seen may not be the one waiting. Desktop's summary
+                # names the tool ("approve: Bash", "(called Bash)"):
+                # only show ours if it matches.
+                if not self.msg or tool in self.msg:
+                    lines.append((WRAP, tool + ": " + summary if summary else tool))
             title = self.msg or "Approval needed"
             return (name, status, KIND_WAITING, True, title, tuple(lines), False)
 
