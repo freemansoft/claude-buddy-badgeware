@@ -52,7 +52,7 @@ by `\n`, sent in either direction.
 
 | Message | Handling |
 |---|---|
-| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) with the session counts on the bottom row of the status screen, but never triggers a refresh by itself. `tokens` is ignored. |
+| Heartbeat (no `cmd`): `total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, optional `prompt {id, tool, hint}` | Updates the screen. A `prompt` makes the screen actionable. `total` 0 for 5 s shows the "No sessions" screen (the reference: "`total == 0` means nothing is open"). Its `hint` is kept up to 2,000 characters, with line breaks, and paged with UP/DOWN. When `prompt` is absent, any prompt is cleared. Missing counters keep their previous value. `tokens_today` is shown rounded (`31k today`) with the session counts on the bottom row of the status screen, but never triggers a refresh by itself. `tokens` is ignored. |
 | `{"evt":"turn", ...}` | Assistant turns: the `text` blocks become **Claude's latest reply** on the status screen. Simple markdown is stripped; it's capped at 3,000 characters and 40 paragraphs, and paged with UP/DOWN. A turn with no text (tool calls only) keeps the previous reply. The last `tool_use` name and a one-line summary are also kept; they're shown only when Desktop reports `waiting` without a `prompt`, a single session is open, and Desktop's `msg` names that tool (Desktop drops turn events over 4 KB, so the last tool seen may not be the one waiting). User turns are ignored. |
 | `{"time":[epoch, tz_offset]}` | Ignored (no clock on screen yet). |
 | Anything else without `cmd` or `evt` | Treated as a heartbeat only if it has at least one heartbeat field (`total`, `running`, `waiting`, `msg`, `entries`, `tokens`, `tokens_today`, `prompt`). Otherwise ignored, so an unknown one-shot message can't clear a pending prompt. |
@@ -83,6 +83,9 @@ but isn't on screen yet). A and B pressed together send nothing.
 ```
 
 - `bat.mA` is omitted because the badge has no current sensor.
+- Charging state (`badge.is_charging()`) is shown in the header only
+  (`Charging` / `Full`); the reference has no field for it, so `bat`
+  keeps just `pct`, `mV` and `usb`.
 - `bat` is the reading sampled every 10 s, which the header also uses.
   It isn't re-sampled on each `status` poll.
 - `appr`/`deny` are counts of decisions made on the badge, persisted in

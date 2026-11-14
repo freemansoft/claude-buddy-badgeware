@@ -303,10 +303,10 @@ class BuddyView:
         rows = []
         counts = None
         for mode, text in lines:
-            if not text:
-                continue
             if mode == COUNTS:
-                counts = text
+                counts = text  # "" = tokens only (no-sessions screen)
+                continue
+            if not text:
                 continue
             if rows:
                 rows.append(None)
@@ -314,8 +314,9 @@ class BuddyView:
             rows.extend(self.wrap(text, self.body_w, max_lines))
 
         bottom = self.body_bottom - self.h_body
-        pages = self._paginate(rows, top, bottom if counts else self.body_bottom)
-        if len(pages) > 1 and not counts:
+        reserved = counts is not None
+        pages = self._paginate(rows, top, bottom if reserved else self.body_bottom)
+        if len(pages) > 1 and not reserved:
             pages = self._paginate(rows, top, bottom)
 
         self._layout_key = key
@@ -367,8 +368,10 @@ class BuddyView:
     def _draw_bottom_row(self, counts, tokens, marker):
         """Counts (and today's tokens) on the left, page marker on the
         right. The counts give way to the marker: full labels, then
-        "run"/"wait", then cut with "..."."""
-        if not counts and not marker:
+        "run"/"wait", then cut with "...". Empty counts ("") show today's
+        tokens alone; None means there's no counts row at all."""
+        text = ", ".join(part for part in (counts, tokens if counts is not None else "") if part)
+        if not text and not marker:
             return
         y = self.body_bottom - self.h_body + 1
         room = self.body_w
@@ -376,9 +379,8 @@ class BuddyView:
             mw = self._width(marker)
             self._text(marker, self.body_x + self.body_w - mw, y)
             room -= mw + HEADER_GAP
-        if not counts:
+        if not text:
             return
-        text = counts + (", " + tokens if tokens else "")
         if self._width(text) > room:
             for full, short in _SHORT_LABELS:
                 text = text.replace(full, short)

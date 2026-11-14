@@ -237,6 +237,52 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(scr[bm.S_KIND], bm.KIND_CONNECTED)  # not "approve: Bash"
         self.assertEqual((self.model.waiting, self.model.msg), (0, ""))
 
+    def test_no_sessions_screen_after_delay(self):
+        self.connect()
+        self.model.handle_line(heartbeat(total=1), 100)
+        self.model.handle_line(heartbeat(total=0, running=0), 1000)
+        delay = bm.NO_SESSIONS_DELAY_MS
+        self.assertEqual(self.model.screen(1000 + delay - 1)[bm.S_KIND], bm.KIND_STATUS)
+        scr = self.model.screen(1000 + delay)
+        self.assertEqual(scr[bm.S_KIND], bm.KIND_NO_SESSIONS)
+        self.assertEqual(scr[bm.S_TITLE], "No sessions")
+        self.assertEqual(scr[bm.S_LINES], ((bm.WRAP, bm.NO_SESSIONS_HINT), (bm.COUNTS, "")))
+        self.assertFalse(scr[bm.S_EMPHASIS])
+        # More heartbeats with total 0 don't restart the delay.
+        self.model.handle_line(heartbeat(total=0, running=0), 1000 + delay + 50)
+        self.assertEqual(self.model.screen(1000 + delay + 60)[bm.S_KIND], bm.KIND_NO_SESSIONS)
+        # A session opens: straight back to status.
+        self.model.handle_line(heartbeat(total=1), 1000 + delay + 100)
+        self.assertEqual(self.model.screen(1000 + delay + 100)[bm.S_KIND], bm.KIND_STATUS)
+
+    def test_brief_zero_total_keeps_status(self):
+        self.connect()
+        self.model.handle_line(heartbeat(total=0, running=0), 100)
+        self.model.handle_line(heartbeat(total=1), 100 + bm.NO_SESSIONS_DELAY_MS - 1)
+        self.assertEqual(self.model.screen(100 + 10 * bm.NO_SESSIONS_DELAY_MS)[bm.S_KIND],
+                         bm.KIND_STATUS)
+
+    def test_no_sessions_keeps_last_reply(self):
+        self.connect()
+        self.model.handle_line(
+            line({"evt": "turn", "role": "assistant", "content": [{"type": "text", "text": "Done."}]}),
+            50,
+        )
+        self.model.handle_line(heartbeat(total=0, running=0), 100)
+        scr = self.model.screen(100 + bm.NO_SESSIONS_DELAY_MS)
+        self.assertIn((bm.WRAP, "Claude: Done."), scr[bm.S_LINES])
+
+    def test_waiting_beats_no_sessions_and_reconnect_resets(self):
+        self.connect()
+        self.model.handle_line(heartbeat(total=0, running=0, waiting=1), 100)
+        later = 100 + 2 * bm.NO_SESSIONS_DELAY_MS
+        self.assertEqual(self.model.screen(later)[bm.S_KIND], bm.KIND_WAITING)
+        self.model.handle_line(heartbeat(total=0, running=0), later)
+        self.model.on_disconnect()
+        self.connect(later)
+        self.model.handle_line(heartbeat(total=1), later + 10)
+        self.assertEqual(self.model.screen(later + 10)[bm.S_KIND], bm.KIND_STATUS)
+
     def test_dead_link_after_timeout(self):
         self.connect(0)
         self.assertFalse(self.model.is_dead(bm.DEAD_LINK_MS))
@@ -443,6 +489,32 @@ class PassengerTest(unittest.TestCase):
         self.assertEqual(self.model.screen(0)[bm.S_BATTERY], "USB")
         self.model.set_battery(None, usb=False)
         self.assertEqual(self.model.screen(0)[bm.S_BATTERY], "")
+
+    def test_usb_labels_charging_full_usb(self):
+        label = lambda: self.model.screen(0)[bm.S_BATTERY]  # noqa: E731
+        self.model.set_battery(60, usb=True, charging=True)
+        self.assertEqual(label(), "Charging")
+        self.model.set_battery(bm.BATTERY_FULL_PCT, usb=True, charging=False)
+        self.assertEqual(label(), "Full")
+        # Not charging but not near full: charging paused, or no battery.
+        self.model.set_battery(bm.BATTERY_FULL_PCT - 1, usb=True, charging=False)
+        self.assertEqual(label(), "USB")
+        self.model.set_battery(None, usb=True, charging=False)
+        self.assertEqual(label(), "USB")
+        # Charging is never reported off USB, and unplugging clears it.
+        self.model.set_battery(60, usb=False, charging=True)
+        self.assertEqual(label(), "50%")
+        self.model.set_battery(60, usb=True, charging=True)
+        self.model.set_usb(False)
+        self.assertFalse(self.model.charging)
+
+    def test_charging_to_full_does_not_change_key(self):
+        self.model.set_battery(90, usb=True, charging=True)
+        old = self.model.screen(0)
+        self.model.set_battery(100, usb=True, charging=False)
+        new = self.model.screen(0)
+        self.assertEqual(new[bm.S_BATTERY], "Full")
+        self.assertEqual(bm.screen_key(old), bm.screen_key(new))
 
     def test_battery_change_does_not_change_key(self):
         self.model.set_battery(90, usb=False)

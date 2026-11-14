@@ -51,12 +51,20 @@ KIND_STATUS = "status"
 KIND_PROMPT = "prompt"
 KIND_ANSWERED = "answered"
 KIND_WAITING = "waiting"
+# Connected, but Desktop reports no sessions open (total == 0).
+KIND_NO_SESSIONS = "none"
 
 ATTENTION_KINDS = (KIND_PROMPT, KIND_WAITING)
 
+# total must stay 0 this long before the "No sessions" screen replaces
+# the status screen, so closing one session and opening another doesn't
+# cost two e-ink refreshes.
+NO_SESSIONS_DELAY_MS = 5000
+NO_SESSIONS_HINT = "Open a chat or Claude Code session in Claude Desktop."
+
 # Body line modes: wrap over as many lines as fit, one line only, or the
 # status counts line (drawn on the bottom row of every page, next to the
-# page marker, with today's tokens appended).
+# page marker, with today's tokens appended; empty text means tokens only).
 WRAP = "w"
 SINGLE = "s"
 COUNTS = "c"
@@ -69,6 +77,9 @@ BATTERY_STEP = 25
 BATTERY_LOW_PCT = 20
 BATTERY_LOW_CLEAR_PCT = 25
 BATTERY_LOW_STEP = 5
+# On USB and not charging: "Full" from this reading up, else "USB" (not
+# charging can also mean no battery is fitted, or charging paused).
+BATTERY_FULL_PCT = 95
 
 # Screen tuple field indexes. Fields before KEY_LEN decide whether the
 # screen changed; the rest are "passengers", drawn whenever a repaint
@@ -238,10 +249,13 @@ class BuddyModel:
         self.msg = ""
         self.entries = ()
         self.tokens_today = None
+        # When total last became 0 (ms), or None while sessions are open.
+        self._no_sessions_since = None
 
         # Badge battery, set by the app via set_battery().
         self.battery_pct = None
         self.on_usb = False
+        self.charging = False
         self.battery_low = False
 
         # Pending permission request: (id, tool, hint) or None.
@@ -282,6 +296,7 @@ class BuddyModel:
         self.last_tool = None
         self.prompt = None
         self.answered = None
+        self._no_sessions_since = None
 
     def _silence_ms(self, now_ms):
         """Time since the last heartbeat. MicroPython ticks wrap, so a
@@ -293,6 +308,13 @@ class BuddyModel:
         if not self.connected or self.last_heartbeat_ms is None:
             return False
         return self._silence_ms(now_ms) > HEARTBEAT_TIMEOUT_MS
+
+    def no_sessions(self, now_ms):
+        """Desktop has reported total == 0 for NO_SESSIONS_DELAY_MS."""
+        if self._no_sessions_since is None or self.total > 0:
+            return False
+        since = ticks_diff(now_ms, self._no_sessions_since)
+        return since < 0 or since >= NO_SESSIONS_DELAY_MS  # < 0: ticks wrapped
 
     def is_dead(self, now_ms):
         """No heartbeat for DEAD_LINK_MS: time to drop the link."""
@@ -339,6 +361,10 @@ class BuddyModel:
         # full snapshots, but this is harmless if a host sends deltas.
         if "total" in msg:
             self.total = _to_int(msg.get("total"))
+            if self.total > 0:
+                self._no_sessions_since = None
+            elif self._no_sessions_since is None:
+                self._no_sessions_since = now_ms
         if "running" in msg:
             self.running = _to_int(msg.get("running"))
         if "waiting" in msg:
@@ -512,11 +538,16 @@ class BuddyModel:
         self.on_usb = usb
         if usb:
             self.battery_low = False
+        else:
+            self.charging = False
         return changed
 
-    def set_battery(self, pct, usb):
-        """Record a battery reading (pct 0-100 or None if unreadable)."""
+    def set_battery(self, pct, usb, charging=False):
+        """Record a battery reading (pct 0-100 or None if unreadable).
+        ``charging`` is badge.is_charging(), which is only ever true on
+        USB power."""
         self.on_usb = bool(usb)
+        self.charging = self.on_usb and bool(charging)
         self.battery_pct = None if pct is None else max(0, min(100, int(pct)))
         if self.on_usb or self.battery_pct is None:
             self.battery_low = False
@@ -527,6 +558,10 @@ class BuddyModel:
 
     def battery_label(self):
         if self.on_usb:
+            if self.charging:
+                return "Charging"
+            if self.battery_pct is not None and self.battery_pct >= BATTERY_FULL_PCT:
+                return "Full"
             return "USB"
         if self.battery_pct is None:
             return ""
@@ -564,6 +599,8 @@ class BuddyModel:
             doc = self.prompt_doc()
         elif kind == KIND_STATUS:
             doc = "r:{}".format(self.reply_seq)
+        elif kind == KIND_NO_SESSIONS:
+            doc = "n:{}".format(self.reply_seq)
         else:
             doc = kind
         return base + (
@@ -633,6 +670,13 @@ class BuddyModel:
         if not self.heartbeat_seen:
             lines = ((WRAP, "Waiting for the first update from Claude."),)
             return (name, status, KIND_CONNECTED, False, "Connected", lines, False)
+
+        if self.no_sessions(now_ms):
+            # Claude's last reply stays as history; the bottom row shows
+            # only today's tokens (an empty counts line), since
+            # "0 running, 0 waiting" adds nothing.
+            lines = ((WRAP, NO_SESSIONS_HINT),) + self._reply_lines + ((COUNTS, ""),)
+            return (name, status, KIND_NO_SESSIONS, False, "No sessions", lines, False)
 
         title = self.msg or ("Idle" if self.running == 0 else "Working")
         counts = ((COUNTS, "{} running, {} waiting".format(self.running, self.waiting)),)

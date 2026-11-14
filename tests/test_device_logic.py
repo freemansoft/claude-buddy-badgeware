@@ -217,6 +217,13 @@ class WrapTest(unittest.TestCase):
         scr = make_scr(kind="prompt", lines=(("w", "ls"),), actionable=True, tokens="31k today")
         self.assertFalse(any("31k" in t for t in self.draw_texts(scr)))
 
+    def test_charging_label_fits_header(self):
+        for status in ("Connected", "Not connected", "No data"):
+            texts = self.draw_texts(make_scr(kind="pair", title="", status=status,
+                                             battery="Charging"))
+            for expected in ("Claude_A1B2C3", "Charging", status):
+                self.assertIn(expected, texts, status)
+
     def test_identifier_never_truncated_when_header_is_tight(self):
         # 264 px / 6 px per char = 44 chars across; make it overflow.
         scr = make_scr(kind="pair", status="Not connected to anything at all",
@@ -309,6 +316,22 @@ class PagingTest(unittest.TestCase):
         drawn = self.drawn_at(scr, 0)
         self.assertIn("12345 run, 67890 wait, 1.2M today", drawn)
         self.assertIn("1/{}".format(self.view.page_count(scr)), drawn)
+
+    def test_empty_counts_row_shows_tokens_only(self):
+        # No-sessions screen: bottom row is today's tokens alone.
+        scr = make_scr(kind="none", title="No sessions",
+                       lines=(("w", "Open a session."), ("c", "")), tokens="31k today")
+        drawn = self.drawn_at(scr, 0)
+        self.assertEqual(drawn["31k today"], (4, self.bottom_y()))
+        self.assertFalse(any(t.startswith(",") for t in drawn))
+        # Without tokens the row is simply empty.
+        scr = make_scr(kind="none", title="No sessions", lines=(("w", "Open a session."), ("c", "")))
+        drawn = self.drawn_at(scr, 0)
+        self.assertFalse(any(y == self.bottom_y() for _, y in drawn.values()))
+
+    def test_tokens_not_on_prompt_bottom_row(self):
+        scr = make_scr(kind="prompt", lines=(("w", LONG),), actionable=True, tokens="31k today")
+        self.assertFalse(any("31k" in t for t in self.drawn_at(scr, 0)))
 
     def test_counts_cut_but_marker_kept(self):
         lines = (("c", "1234567890 running, 1234567890 waiting"), ("w", "Claude: " + LONG))

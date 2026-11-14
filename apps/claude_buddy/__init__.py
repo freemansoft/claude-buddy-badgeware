@@ -183,6 +183,15 @@ def _usb_present():
         return _battery.get("usb", False)
 
 
+def _is_charging():
+    """badge.is_charging(): USB present and the charger's status pin says
+    charging. False on battery, or if the firmware lacks it."""
+    try:
+        return bool(badge.is_charging())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _poll_battery(now):
     """USB presence every loop (one pin read) so plug/unplug shows within
     the settle delay; the battery ADC every BATTERY_POLL_MS, or straight
@@ -195,7 +204,9 @@ def _poll_battery(now):
     _next_battery_ms = time.ticks_add(now, BATTERY_POLL_MS)
     _battery.clear()
     _battery.update(_read_battery())
-    model.set_battery(_battery.get("pct"), _battery.get("usb", False))
+    # Charging state is for the header only; the status ack's "bat" keeps
+    # the reference's fields (pct, mV, usb).
+    model.set_battery(_battery.get("pct"), _battery.get("usb", False), _is_charging())
 
 
 def update():

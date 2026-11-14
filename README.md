@@ -64,7 +64,12 @@ right of the bottom row:
       short, the battery is dropped first and then the status is
       shortened.
   - **Battery:**
-    - shown in 25% steps (`100%` … `25%`), or `USB` when plugged in;
+    - on battery, shown in 25% steps (`100%` … `25%`);
+    - on USB power, `Charging` while the charger is charging (from
+      Badgeware's `badge.is_charging()`), `Full` when it has stopped
+      with the battery reading 95% or more, and `USB` otherwise (for
+      example with no battery fitted). `Charging` changing to `Full`
+      shows on the next refresh; it doesn't cause one by itself;
     - plugging in or unplugging shows within about 0.3 s. The USB-power
       pin is checked every loop, and a fresh battery reading is taken on
       each change. The cost is one e-ink refresh per plug or unplug;
@@ -99,6 +104,12 @@ right of the bottom row:
     - recent transcript lines;
     - the pairing instructions;
     - the result after you answer.
+  - **No sessions:** when Claude Desktop reports no sessions open
+    (`total` 0) for 5 s, the title becomes `No sessions`, with a hint
+    to open one. Claude's last reply stays below as history, and the
+    bottom row shows only today's tokens. The 5 s delay means closing
+    one session and opening another doesn't cost two e-ink refreshes.
+    Opening a session switches back within about 0.3 s.
   - **Paging:** when the content is longer than the screen, **DOWN** and
     **UP** move through the pages. This works on both prompts and the
     status screen.
@@ -312,31 +323,54 @@ tools/make_icon.py        regenerate icon.png (no dependencies)
 
 ## Development
 
+### Making a change
+
+1. Make the code changes, and run the host tests (below).
+2. Put the badge in disk mode: **double-tap RESET** on the back. It
+   mounts as a USB drive named `BADGER`.
+3. Copy the app across: `python3 tools/install.py`.
+4. Eject the drive.
+5. If the badge doesn't restart into the menu by itself, press RESET
+   once.
+6. Run the app from the Badgeware menu: select the **Claude Buddy**
+   icon and press **B**.
+
+### Checks on the host
+
 ```bash
 python3 -m unittest discover -s tests -v   # protocol, wrapping, paging, repaint policy, framing
 ruff check .                               # Pimoroni's lint rules
 pip install mpy-cross && mpy-cross apps/claude_buddy/buddy_model.py   # syntax check
 ```
 
-`print()` output from the app (connects, disconnects, BLE errors)
-appears on the badge's USB serial REPL, e.g. in Thonny or
-`mpremote`.
+`print()` output from the app (connects, disconnects, BLE errors) is
+meant for the badge's USB serial REPL, e.g. in Thonny or `mpremote`. In
+practice it may not show up there while the app runs; the receive log
+below is more reliable.
 
 ### Logging what Claude Desktop sends
 
-The app can write every line it receives to a file. Logging is off
-unless the file already exists. The file lives in `/state`: apps can't
-write to `/system` (the USB drive), which is read-only to MicroPython,
-so the log isn't visible in disk mode. Use `mpremote` (with nothing
-else holding the serial port):
+The app can write every line it receives from Claude Desktop to a file.
+Logging is off unless that file already exists when the app starts.
+
+The file lives in `/state`, not on the USB drive: apps can't write to
+`/system` (the drive), which is read-only to MicroPython. So the log
+isn't visible in disk mode; it's read over the USB cable with
+[`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html),
+with nothing else (Thonny, another `mpremote`) holding the serial port.
 
 1. Create the empty log file:
    `mpremote exec "open('/state/claude_buddy_rx.log','w').close()"`
-2. Launch Claude Buddy (it checks for the file at launch).
-3. Exit with C (this writes any buffered lines), then read it:
-   `mpremote fs cat :/state/claude_buddy_rx.log`
-4. Turn it off: `mpremote fs rm :/state/claude_buddy_rx.log` (and
-   `:/state/claude_buddy_rx.log.old` if present)
+2. Launch Claude Buddy from the menu (it checks for the file at launch)
+   and use it as normal.
+3. Exit the app with **C**. This writes any buffered lines and frees
+   the serial connection.
+4. Read the log over USB:
+   `mpremote fs cat :/state/claude_buddy_rx.log`. A coding assistant
+   such as Claude Code can run this itself once the app has exited, and
+   read exactly what Desktop sent.
+5. Turn logging off: `mpremote fs rm :/state/claude_buddy_rx.log` (and
+   `:/state/claude_buddy_rx.log.old` if present).
 
 Each line is `<ticks_ms> <tag> <text>`: `RX` for a line from Desktop,
 `TX` for an Accept/Deny sent, `--` for connect/disconnect and skip
