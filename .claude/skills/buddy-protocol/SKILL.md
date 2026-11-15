@@ -111,7 +111,8 @@ tell the user about any limit that bites:
   place.)
 - **Both badges:** the protocol layer is shared. Anything
   display-specific belongs in the view or painter, and goes in
-  `docs/devices.md` (Tufty: _Not implemented_).
+  `docs/devices.md` (_Not implemented_ on a badge that doesn't have it
+  yet).
 
 ## Keeping the docs in step
 

@@ -76,10 +76,13 @@ than one place on purpose, as summaries.
 
 ## Devices: marking future work
 
-The Tufty 2350 has no display code yet. Wherever a doc compares the
-badges, the Tufty entry says _Not implemented_ and, where there's one,
-the plan (e.g. "Not implemented (plan: exact %, live)"). If the code
-sets a Tufty value that hasn't been run on hardware, call it an
+Both badges run the app, each with its own profile in
+`apps/claude_buddy/buddy_profile.py`. Some features aren't built yet
+on one badge or either (for example, the Tufty's light sensor isn't
+used). Wherever a doc compares the badges, the missing side says
+_Not implemented_ and, where there's one, the plan (e.g. "Not
+implemented (plan: set the backlight level)"). If
+the code sets a value that hasn't been run on hardware, call it an
 "untested placeholder". Every behaviour difference between the badges
 gets a row in `docs/devices.md`.
 
