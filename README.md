@@ -14,22 +14,23 @@ the badge's buttons.
 > device could connect while the app runs. Approvals still need a
 > button press on the badge. See [Security](#security).
 
-- **Target:** Badger 2350 (264×176, 4-grey e-ink).
-- **Planned (phase 2):** Tufty 2350 (always-on colour LCD), with its own
-  display profile for live updates. The layout and theme already adapt
-  to the screen; see
-  [Phase 2 design](#phase-2-design-tufty-display-switch).
+- **Targets:**
+  - Badger 2350 (264×176, 4-grey e-ink);
+  - Tufty 2350 (320×240 colour LCD), with its own fonts and colours
+    but, for now, the Badger's refresh rules. A live display profile is
+    next; see [Phase 2 design](#phase-2-design-tufty-display-switch).
 - **Language:** MicroPython, running as a normal Badgeware app launched
   from the badge's menu.
 - **License:** MIT.
 
-> **Status: phase 1, running on a Badger 2350.** It connects to Claude
-> Desktop on macOS, shows Claude's status and the not-connected
-> screens, and answers short Bash permission prompts with A and B. Not
-> yet tried: Claude Desktop on Windows, power draw on battery, and the
-> Tufty 2350. On the host, the protocol logic, text wrapping and BLE
-> line framing are unit-tested, and all device files compile with
-> `mpy-cross` and pass Pimoroni's lint rules.
+> **Status: running on a Badger 2350 and a Tufty 2350.** On both it
+> connects to Claude Desktop on macOS, shows Claude's status and the
+> not-connected screens, and answers short Bash permission prompts with
+> A and B. The Tufty uses the Badger's refresh rules for now. Not yet
+> tried: Claude Desktop on Windows, and power draw on battery. On the
+> host, the protocol logic, text wrapping and BLE line framing are
+> unit-tested, and all device files compile with `mpy-cross` and pass
+> Pimoroni's lint rules.
 
 ## Screen
 
@@ -191,9 +192,12 @@ right of the bottom row:
 ```
 
 An earlier version drew status text in dark grey, but that was too hard
-to read on e-ink, so all text is black now. The fonts are constants at
-the top of `apps/claude_buddy/buddy_view.py` (`BAR_FONT`, `TITLE_FONT`,
-`BODY_FONT`). The firmware has 37 built-in pixel fonts to choose from.
+to read on e-ink, so all text is black now. The fonts are set per
+badge in `FONTS` at the top of `apps/claude_buddy/buddy_view.py`. The
+firmware has 37 built-in pixel fonts to choose from. The Tufty shows
+the same screens, white on black, in larger fonts (`smart` and
+`curse`) that come out about the same size as the Badger's on its
+denser screen.
 
 There is no creature or animation. Nothing on screen moves.
 
@@ -445,8 +449,11 @@ done.
     - check the fonts and layout on the panel;
     - tune the refresh thresholds;
     - confirm MTU negotiation and that long prompts arrive.
-- **Phase 2: Tufty 2350** (when the hardware is available). See
-  [Phase 2 design](#phase-2-design-tufty-display-switch) below.
+- **Phase 2: Tufty 2350.**
+  - Step 1 (done): runs at 320×240 with its own fonts and colours,
+    using the Badger's refresh rules.
+  - Next: a live LCD profile. See
+    [Phase 2 design](#phase-2-design-tufty-display-switch) below.
 - **Phase 3: power** (both badges). Measure first, then consider:
   - a longer advertising interval;
   - a lower CPU clock;
@@ -490,11 +497,12 @@ done.
 
 ### Phase 2 design: Tufty display switch
 
-The Tufty has no display code yet. Its colour LCD is always on and
-redraws without flashing, so the Badger's e-ink rules (which exist to
-avoid refreshes) would only make it lag. Phase 2 adds a **display
-profile** chosen from `badge.model` and moves every refresh decision
-behind it.
+The Tufty runs today with its own resolution, fonts and colours, but
+the Badger's e-ink refresh rules. Its colour LCD is always on and
+redraws without flashing, so those rules (which exist to avoid
+refreshes) only make it lag: status updates appear at most every 15 s.
+The next step adds a **display profile** chosen from `badge.model` and
+moves every refresh decision behind it.
 
 The full comparison of the two displays, the planned Tufty profile,
 where the code switches, and what to check on a Tufty are in
@@ -587,7 +595,10 @@ the current firmware builds with.
 - [ci/ruff.toml](https://github.com/pimoroni/badger2350/blob/main/ci/ruff.toml):
   the lint rules mirrored in this repo's `ruff.toml`.
 - [pimoroni/tufty2350](https://github.com/pimoroni/tufty2350): the
-  Tufty 2350 firmware, for the planned port.
+  Tufty 2350 firmware. Its `run()` in
+  `modules/common/badgeware/__init__.py` clears and sends the screen
+  every loop, which is why the app sets `badge.default_clear = None`
+  there.
 
 ### Graphics library ([picovector-micropython v3.1.0](https://github.com/pimoroni/picovector-micropython/tree/v3.1.0))
 

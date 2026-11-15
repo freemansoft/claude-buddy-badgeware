@@ -1,4 +1,4 @@
-"""Claude Buddy for Badgeware (Badger 2350; Tufty 2350 planned).
+"""Claude Buddy for Badgeware (Badger 2350 and Tufty 2350).
 
 A Claude Desktop "Hardware Buddy": pairs over BLE (Nordic UART, line
 JSON), shows the latest status from Claude, and answers permission
@@ -11,7 +11,9 @@ prompts with the badge buttons.
 
 E-ink refresh policy lives in buddy_painter.Painter: the screen is
 reduced to a tuple (buddy_model.BuddyModel.screen) and the panel only
-refreshes when that tuple or the page changes. Changes that need the
+refreshes when that tuple or the page changes. The Tufty's LCD uses
+the same policy for now (a live LCD profile is planned; see
+docs/devices.md). Changes that need the
 user (a prompt, a connection change, a page turn) repaint after a short
 settle delay; status-only changes repaint at most every
 STATUS_MIN_INTERVAL_MS.
@@ -57,6 +59,8 @@ WAITING_BLIP_MS = 120
 WAITING_BLINK_REPEAT_MS = 5000
 
 STATE_KEY = "claude_buddy"
+# badge.model values this app has a layout for.
+MODELS = ("badger", "tufty")
 
 
 # -- platform glue ------------------------------------------------------------
@@ -159,13 +163,30 @@ def _caselights(level):
 
 # -- app ----------------------------------------------------------------------
 
+if badge.model not in MODELS:
+    fatal_error("Claude Buddy", "Needs a Badger 2350 or Tufty 2350, not: " + str(badge.model))
+
 if _is_badger():
     # The driver currently ignores the speed bits (every refresh uses the
     # same 4-grey waveform), but NON_BLOCKING lets the loop keep reading
     # buttons and BLE while the panel refreshes (~1-2 s).
     badge.mode(FAST_UPDATE | NON_BLOCKING)
 else:
+    # Tufty: 320x240. The LCD needs none of the e-ink settings above.
     badge.mode(HIRES)
+    # On the Tufty, Badgeware's run() clears the framebuffer
+    # (badge.clear()) and pushes it to the LCD (display.update()) every
+    # frame, for apps that redraw every frame. This app draws only when
+    # the painter says so, like on e-ink, so without this the screen
+    # would go blank one frame after each paint. With no clear colour,
+    # badge.clear() leaves the framebuffer alone and each frame re-sends
+    # the last screen drawn.
+    badge.default_clear = None
+
+# Whether Badgeware's run() calls badge.poll() itself between our
+# update() calls: the Tufty's does, the Badger's doesn't. update() must
+# poll exactly once per pass, or button presses are lost.
+_RUN_POLLS = not _is_badger()
 
 gc.collect()
 try:
@@ -242,6 +263,10 @@ def update():
     """One pass of the app loop; Badgeware's run() calls it repeatedly.
 
     Order matters:
+    0. Read the buttons once per pass: badge.poll() here on the
+       Badger. On the Tufty, run() has just called badge.poll() and
+       we use its reading (see _RUN_POLLS); a second poll would lose
+       every press.
     1. Power: USB presence every pass, the battery ADC every
        BATTERY_POLL_MS.
     2. BLE: handle received lines (replies go straight back), connects
@@ -260,7 +285,11 @@ def update():
     True exits to the menu.
     """
     global _buttons_armed
-    badge.poll()
+    # pressed() reports what changed since the previous poll. The
+    # Tufty's run() has just polled, so polling again here would wipe
+    # out every press it caught.
+    if not _RUN_POLLS:
+        badge.poll()
     now = time.ticks_ms()
     _poll_battery(now)
 

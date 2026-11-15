@@ -1,7 +1,8 @@
 """Draws the Claude Buddy screen with the Badgeware drawing API.
 
-Layout (Badger 2350, 264x176; everything is derived from screen size
-and font heights so the Tufty 2350 can reuse it):
+Layout (shown for the Badger 2350, 264x176; everything is derived
+from screen size and font heights, so the Tufty 2350 at 320x240 uses
+the same layout with its own fonts and colours):
 
     +------------------------------------------+
     | Claude_A1B2C3              75% Connected |  header: id, battery, link
@@ -54,9 +55,16 @@ FRAME_GAP = 4  # space between the frame and the text
 # Inside the frame the title is centred, with a rule across the frame
 # between it and the instructions, FRAME_GAP each side.
 TITLE_RULE_W = 2  # thickness of that rule
-BAR_FONT = "nope"
-TITLE_FONT = "absolute"
-BODY_FONT = "nope"
+# Fonts per badge.model, as (bar, title, body); bar is the header and
+# footer. The Tufty's pixels are smaller (about 143 per inch against
+# the Badger's 117), so it uses taller fonts that come out about the
+# same size to the eye: 16 px smart against the Badger's 13 px nope,
+# and a 20 px curse title against its 16 px absolute. On the Tufty,
+# smart read more easily than the wider absolute.
+FONTS = {
+    "badger": ("nope", "absolute", "nope"),
+    "tufty": ("smart", "curse", "smart"),
+}
 TITLE_MAX_LINES = 2
 LINE_GAP = 2
 HEADER_GAP = 8
@@ -67,7 +75,10 @@ MAX_WRAP_LINES = 400
 # Shorter count labels for the bottom row when the full ones don't fit.
 _SHORT_LABELS = ((" running", " run"), (" waiting", " wait"))
 # Footer text in place of A/B when Claude waits for an approval the
-# badge can't answer (163 px in nope; 188 px fit before "C: Exit").
+# badge can't answer. The footer measures it and cuts it with "..." if
+# it doesn't fit before "C: Exit" (it fits on both badges: 163 of
+# 188 px in nope on the Badger, 150 of about 220 px in smart on the
+# Tufty).
 APP_ONLY_NOTE = "Answer in the Claude App"
 
 # Unicode punctuation Claude commonly sends, mapped to ASCII the ROM
@@ -122,14 +133,14 @@ def _height(f, fallback=12):
 
 class Theme:
     """Colours per badge. The Badger is black on white with no greys
-    (grey text was too faint on e-ink); the Tufty (Phase 2, not yet
-    built) is light on dark."""
+    (grey text was too faint on e-ink). The Tufty is white on black,
+    Badgeware's own default for it."""
 
     def __init__(self, model):
         if model == "badger":
             self.bg = color.white
             self.fg = color.black
-        else:  # Tufty (colour LCD): light on dark
+        else:  # Tufty (colour LCD): white on black
             self.bg = color.black
             self.fg = color.white
 
@@ -137,14 +148,15 @@ class Theme:
 class BuddyView:
     """Draws one screen tuple into the framebuffer. It never pushes to
     the panel (that's the painter's job, and the expensive part on
-    e-ink). Layout is derived from the screen size and font heights so
-    the Tufty can reuse it."""
+    e-ink). Layout is derived from the screen size and font heights, so
+    both badges share it; only the fonts and colours differ."""
 
     def __init__(self):
         self.theme = Theme(badge.model)
-        self.f_bar = _font(BAR_FONT)
-        self.f_title = _font(TITLE_FONT)
-        self.f_body = _font(BODY_FONT)
+        bar, title, body = FONTS.get(badge.model, FONTS["badger"])
+        self.f_bar = _font(bar)
+        self.f_title = _font(title)
+        self.f_body = _font(body)
         self.h_bar = _height(self.f_bar)
         self.h_title = _height(self.f_title)
         self.h_body = _height(self.f_body)

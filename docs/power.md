@@ -48,8 +48,8 @@ between the badges, with the planned Tufty profile, is in
 
 | Setting        | Badger 2350 (e-ink)                                                                                | Tufty 2350 (colour LCD)                                 |
 | -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Display power  | Only while refreshing, so the app keeps refreshes rare (see [E-ink only](#e-ink-only-badger-2350)) | Not implemented (the LCD is always on)                  |
-| Refresh policy | Settle, throttle and hold timings in [devices.md](devices.md#how-the-app-treats-each-display)      | Not implemented                                         |
+| Display power  | Only while refreshing, so the app keeps refreshes rare (see [E-ink only](#e-ink-only-badger-2350)) | Always on; Badgeware sends a frame every loop           |
+| Refresh policy | Settle, throttle and hold timings in [devices.md](devices.md#how-the-app-treats-each-display)      | The Badger's, for now (LCD profile planned)             |
 | Backlight      | None                                                                                               | Not implemented (dim when idle, using the light sensor) |
 | Case lights    | As in [USB power vs battery](#usb-power-vs-battery)                                                | Not implemented                                         |
 
@@ -89,8 +89,10 @@ thing: make as few refreshes as possible. The app does this in
    instead of drawing a "sending…" screen.
 
 None of this applies to an always-on LCD, where these rules only make
-the screen lag. That's why the Tufty will get its own profile (see
-[devices.md](devices.md)).
+the screen lag. The Tufty uses them for now and will get its own
+profile (see [devices.md](devices.md)). On the Tufty they save little
+power: the backlight is on and Badgeware sends a frame every loop
+either way. No measurements yet.
 
 ## Why the badge never sleeps
 
