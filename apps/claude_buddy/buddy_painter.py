@@ -18,8 +18,10 @@ first one only when the screen's document (buddy_model S_DOC: a prompt
 id, or which reply) changes. A routine status update leaves the reader
 where they are, clamped if the content got shorter.
 
-Phase 2 (Tufty LCD) will pass a different profile: no status throttle,
-and a key function that includes the passengers.
+The timings come from the badge's profile (buddy_profile.Refresh), per
+power source: the app calls set_refresh() every pass. A live LCD
+profile (no throttle, a key that includes the passengers) is planned
+for the Tufty on USB power.
 """
 
 from buddy_model import S_ACTIONABLE, S_DOC, is_urgent, screen_key
@@ -45,7 +47,7 @@ class Painter:
         """``present()`` pushes the framebuffer to the panel; ``busy()`` is
         True while a refresh is still in progress (the app runs the
         panel non-blocking). ``settle_ms`` and ``status_interval_ms`` are
-        the app's URGENT_SETTLE_MS and STATUS_MIN_INTERVAL_MS."""
+        the starting timings; see set_refresh()."""
         self.view = view
         self._present = present
         self._busy = busy
@@ -62,10 +64,18 @@ class Painter:
 
     # -- input --------------------------------------------------------------
 
+    def set_refresh(self, refresh):
+        """Use ``refresh``'s timings (a buddy_profile.Refresh) from now
+        on. The app calls this every pass with the timings for the
+        current power source; it is two attribute writes."""
+        self.settle_ms = refresh.settle_ms
+        self.status_interval_ms = refresh.status_interval_ms
+
     def hold(self, now, ms):
-        """Paint nothing for ``ms``. Used after A/B (ANSWER_SETTLE_MS) so
-        "Allowed"/"Denied" and Desktop's follow-up heartbeat, which
-        clears the prompt, land in one refresh instead of two."""
+        """Paint nothing for ``ms``. Used after A/B (the profile's
+        ``answer_hold_ms``) so "Allowed"/"Denied" and Desktop's
+        follow-up heartbeat, which clears the prompt, land in one
+        refresh instead of two."""
         self.hold_until_ms = ticks_add(now, ms)
         self.first_diff_ms = None
 

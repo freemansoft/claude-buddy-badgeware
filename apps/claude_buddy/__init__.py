@@ -9,14 +9,17 @@ prompts with the badge buttons.
     C        Exit to the Badgeware menu (HOME also works)
     UP/DOWN  Page through a long prompt or Claude's latest reply
 
-E-ink refresh policy lives in buddy_painter.Painter: the screen is
-reduced to a tuple (buddy_model.BuddyModel.screen) and the panel only
-refreshes when that tuple or the page changes. The Tufty's LCD uses
-the same policy for now (a live LCD profile is planned; see
-docs/devices.md). Changes that need the
+Everything that differs between the badges (display mode, fonts,
+colours, backlight, refresh timings, Badgeware loop quirks) is in the
+badge's profile (buddy_profile), chosen once below from badge.model.
+
+Refresh policy lives in buddy_painter.Painter: the screen is reduced
+to a tuple (buddy_model.BuddyModel.screen) and the panel only
+refreshes when that tuple or the page changes. Changes that need the
 user (a prompt, a connection change, a page turn) repaint after a short
 settle delay; status-only changes repaint at most every
-STATUS_MIN_INTERVAL_MS.
+``status_interval_ms`` of the profile's Refresh for the current power
+source.
 """
 
 import gc
@@ -31,18 +34,14 @@ from buddy_backlight import Backlight  # noqa: E402
 from buddy_lights import CaseLights  # noqa: E402
 from buddy_model import ATTENTION_KINDS, S_KIND, BuddyModel, is_urgent  # noqa: E402
 from buddy_painter import Painter  # noqa: E402
+from buddy_profile import PROFILES  # noqa: E402
 from buddy_rxlog import RxLog  # noqa: E402
 from buddy_view import BuddyView  # noqa: E402
 
 # -- tuning -----------------------------------------------------------------
 
-# Coalesce bursts (e.g. heartbeat + status poll) into one refresh.
-URGENT_SETTLE_MS = 300
-# After A/B, wait this long so Claude's follow-up heartbeat (prompt
-# cleared) lands in the same refresh as the "Allowed"/"Denied" result.
-ANSWER_SETTLE_MS = 1000
-# Status-only changes (msg, entries, counts) refresh at most this often.
-STATUS_MIN_INTERVAL_MS = 15000
+# Refresh timings, fonts, colours and the backlight levels are per badge,
+# in buddy_profile.
 LOOP_SLEEP_MS = 20
 # Ignore buttons briefly at launch so the menu's launch press can't
 # count as an answer.
@@ -58,18 +57,8 @@ BLINK_MS = 150
 BLINK_LEVEL = 0.6
 WAITING_BLIP_MS = 120
 WAITING_BLINK_REPEAT_MS = 5000
-# Tufty backlight (no repaint): on battery, it dims after
-# BACKLIGHT_IDLE_MS with nothing needing the user and no button press,
-# and the first press only wakes it. Always bright on USB power. The
-# Badger has no backlight. Levels are 0-1; BACKLIGHT_BRIGHT is the
-# firmware's own start-up level (230 of 255).
-BACKLIGHT_BRIGHT = 0.9
-BACKLIGHT_DIM = 0.1
-BACKLIGHT_IDLE_MS = 60000
 
 STATE_KEY = "claude_buddy"
-# badge.model values this app has a layout for.
-MODELS = ("badger", "tufty")
 
 
 # -- platform glue ------------------------------------------------------------
@@ -125,10 +114,6 @@ def _status():
     }
 
 
-def _is_badger():
-    return badge.model == "badger"
-
-
 def _display_busy():
     """True while the e-ink panel is still refreshing.
 
@@ -145,17 +130,17 @@ def _display_busy():
 def _present():
     """Push the framebuffer to the panel.
 
-    On the Badger the first frame after launching an app uses the
-    slowest (cleanest) waveform to clear ghosting from the menu, same as
-    badge.update(). badge.update() isn't used because it also polls the
-    buttons, which would swallow a press made between our poll and the
-    refresh.
+    On e-ink (profile.eink) the first frame after launching an app uses
+    the slowest (cleanest) waveform to clear ghosting from the menu,
+    same as badge.update(). badge.update() isn't used because it also
+    polls the buttons, which would swallow a press made between our
+    poll and the refresh.
     """
-    first = badge.first_update
-    if _is_badger() and first:
+    first = badge.first_update and profile.eink
+    if first:
         display.speed(0)
     display.update()
-    if _is_badger() and first:
+    if first:
         display.speed((badge.mode() >> 4) & 0xF)
     badge.first_update = False
 
@@ -187,17 +172,17 @@ def _caselights(level):
 
 # -- app ----------------------------------------------------------------------
 
-if badge.model not in MODELS:
+profile = PROFILES.get(badge.model)
+if profile is None:
     fatal_error("Claude Buddy", "Needs a Badger 2350 or Tufty 2350, not: " + str(badge.model))
 
-if _is_badger():
-    # The driver currently ignores the speed bits (every refresh uses the
-    # same 4-grey waveform), but NON_BLOCKING lets the loop keep reading
-    # buttons and BLE while the panel refreshes (~1-2 s).
-    badge.mode(FAST_UPDATE | NON_BLOCKING)
-else:
-    # Tufty: 320x240. The LCD needs none of the e-ink settings above.
-    badge.mode(HIRES)
+# Badger: FAST_UPDATE | NON_BLOCKING. The driver currently ignores the
+# speed bits (every refresh uses the same 4-grey waveform), but
+# NON_BLOCKING lets the loop keep reading buttons and BLE while the
+# panel refreshes (~1-2 s). Tufty: HIRES, 320x240.
+badge.mode(profile.mode())
+
+if profile.run_clears_screen:
     # On the Tufty, Badgeware's run() clears the framebuffer
     # (badge.clear()) and pushes it to the LCD (display.update()) every
     # frame, for apps that redraw every frame. This app draws only when
@@ -210,7 +195,7 @@ else:
 # Whether Badgeware's run() calls badge.poll() itself between our
 # update() calls: the Tufty's does, the Badger's doesn't. update() must
 # poll exactly once per pass, or button presses are lost.
-_RUN_POLLS = not _is_badger()
+_RUN_POLLS = profile.run_polls_buttons
 
 gc.collect()
 try:
@@ -221,12 +206,15 @@ except ImportError:
     fatal_error("Claude Buddy", "This firmware has no Bluetooth support.")
 
 model = BuddyModel(ble.name, store=_Store(), status_provider=_status)
+# The timings for the current power source are set every pass
+# (painter.set_refresh); start with the battery ones.
+_refresh = profile.refresh(False)
 painter = Painter(
-    BuddyView(),
+    BuddyView(profile),
     present=_present,
     busy=_display_busy,
-    settle_ms=URGENT_SETTLE_MS,
-    status_interval_ms=STATUS_MIN_INTERVAL_MS,
+    settle_ms=_refresh.settle_ms,
+    status_interval_ms=_refresh.status_interval_ms,
 )
 print("claude_buddy: advertising as", ble.name)
 # Debug log of what Desktop sends; off unless its file exists.
@@ -244,11 +232,15 @@ lights = CaseLights(
 )
 
 _started_ms = time.ticks_ms()
+# Tufty backlight (no repaint): on battery it dims after the profile's
+# idle time with nothing needing the user and no button press, and the
+# first press only wakes it. A badge without one gets a no-op.
+_bl = profile.backlight
 backlight = Backlight(
-    None if _is_badger() else _set_backlight,
-    bright=BACKLIGHT_BRIGHT,
-    dim=BACKLIGHT_DIM,
-    idle_ms=BACKLIGHT_IDLE_MS,
+    _set_backlight if _bl else None,
+    bright=_bl.bright if _bl else 1,
+    dim=_bl.dim if _bl else 1,
+    idle_ms=_bl.idle_ms if _bl else 0,
     now=_started_ms,
 )
 _last_scr = None
@@ -326,6 +318,8 @@ def update():
         badge.poll()
     now = time.ticks_ms()
     _poll_battery(now)
+    refresh = profile.refresh(model.on_usb)
+    painter.set_refresh(refresh)
 
     for kind, payload in ble.poll():
         if kind == "line":
@@ -366,7 +360,7 @@ def update():
                 rx_log.note(now, "TX", message)
                 model.record_decision(message)
                 lights.ack(now)
-                painter.hold(now, ANSWER_SETTLE_MS)
+                painter.hold(now, refresh.answer_hold_ms)
 
     scr = model.screen(now)
     # Waiting for an answer (badge prompt or "Answer in the Claude App")

@@ -137,6 +137,7 @@ install_badgeware_stubs()
 install_bluetooth_stub()
 
 import buddy_ble  # noqa: E402
+import buddy_profile  # noqa: E402
 import buddy_view  # noqa: E402
 
 
@@ -150,8 +151,10 @@ def make_scr(kind="status", title="Allow Bash?", lines=(), actionable=False,
 
 
 class WrapTest(unittest.TestCase):
+    PROFILE = buddy_profile.BADGER
+
     def setUp(self):
-        self.view = buddy_view.BuddyView()
+        self.view = buddy_view.BuddyView(self.PROFILE)
         self.width = 60  # 10 chars at CHAR_W
 
     def wrap(self, text, max_lines=10):
@@ -200,7 +203,7 @@ class WrapTest(unittest.TestCase):
     def test_no_escaping_where_firmware_has_no_markup(self):
         FakeScreen.markup = False
         self.addCleanup(setattr, FakeScreen, "markup", True)
-        view = buddy_view.BuddyView()
+        view = buddy_view.BuddyView(self.PROFILE)
         view.draw(make_scr(kind="status", lines=(("w", "[pen:1,2,3]x [ -f a ]"),)))
         texts = [t for t, _, _ in screen.drawn]
         self.assertTrue(any("[pen:1,2,3]x" in t for t in texts))
@@ -373,26 +376,27 @@ LONG = " ".join("word{:05d}".format(i) for i in range(60))
 class TuftyViewTest(WrapTest):
     """Every WrapTest again on the Tufty: 320x240, with its own fonts
     and colours. The layout is derived from the screen size and font
-    heights, so the same checks must hold."""
+    heights, so the same checks must hold. badge.model stays "badger":
+    the view must take everything from the profile it's given."""
+
+    PROFILE = buddy_profile.TUFTY
 
     def setUp(self):
         FakeScreen.width, FakeScreen.height = 320, 240
-        builtins.badge.model = "tufty"
         buddy_view._loaded.clear()
-        self.addCleanup(self._back_to_badger)
+        self.addCleanup(self._back_to_badger_size)
         super().setUp()
 
     @staticmethod
-    def _back_to_badger():
+    def _back_to_badger_size():
         FakeScreen.width, FakeScreen.height = 264, 176
-        builtins.badge.model = "badger"
 
     def test_uses_the_tufty_size_fonts_and_colours(self):
         self.assertEqual((self.view.w, self.view.h), (320, 240))
         # MonaSans (vector) at 18 px bar, 24 px title, 20 px body.
         for face, size in ((self.view.f_bar, 18), (self.view.f_title, 24),
                            (self.view.f_body, 20)):
-            self.assertEqual(face.font.path, buddy_view.MONA)
+            self.assertEqual(face.font.path, buddy_profile.MONA)
             self.assertEqual((face.size, face.height), (size, size))
         self.assertEqual((self.view.theme.bg, self.view.theme.fg), ("black", "white"))
         # Taller fonts, so taller header and footer bars than the Badger's.
@@ -421,10 +425,10 @@ class TuftyViewTest(WrapTest):
         self.assertTrue(set(screen.sizes) <= {18, 20, 24}, set(screen.sizes))
 
     def test_falls_back_to_pixel_fonts_without_the_font_file(self):
-        MISSING_FONTS.add(buddy_view.MONA)
+        MISSING_FONTS.add(buddy_profile.MONA)
         self.addCleanup(MISSING_FONTS.clear)
         buddy_view._loaded.clear()
-        view = buddy_view.BuddyView()
+        view = buddy_view.BuddyView(buddy_profile.TUFTY)
         self.assertIs(view.f_bar.font, font.smart)
         self.assertIs(view.f_title.font, font.curse)
         self.assertEqual((view.f_body.size, view.h_body), (0, 16))
@@ -432,7 +436,7 @@ class TuftyViewTest(WrapTest):
 
 class BadgerFontTest(unittest.TestCase):
     def test_badger_keeps_its_pixel_fonts_unscaled(self):
-        view = buddy_view.BuddyView()
+        view = buddy_view.BuddyView(buddy_profile.BADGER)
         self.assertIs(view.f_bar.font, font.nope)
         self.assertIs(view.f_title.font, font.absolute)
         self.assertIs(view.f_body.font, font.nope)
@@ -446,7 +450,7 @@ class BadgerFontTest(unittest.TestCase):
 
 class PagingTest(unittest.TestCase):
     def setUp(self):
-        self.view = buddy_view.BuddyView()
+        self.view = buddy_view.BuddyView(buddy_profile.BADGER)
 
     def body_texts(self, scr, page):
         self.view.draw(scr, page)
