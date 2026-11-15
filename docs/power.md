@@ -46,12 +46,12 @@ Only the power-relevant differences are here. Every display difference
 between the badges, with the planned Tufty profile, is in
 [devices.md](devices.md).
 
-| Setting        | Badger 2350 (e-ink)                                                                                | Tufty 2350 (colour LCD)                                 |
-| -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Display power  | Only while refreshing, so the app keeps refreshes rare (see [E-ink only](#e-ink-only-badger-2350)) | Not implemented (the LCD is always on)                  |
-| Refresh policy | Settle, throttle and hold timings in [devices.md](devices.md#how-the-app-treats-each-display)      | Not implemented                                         |
-| Backlight      | None                                                                                               | Not implemented (dim when idle, using the light sensor) |
-| Case lights    | As in [USB power vs battery](#usb-power-vs-battery)                                                | Not implemented                                         |
+| Setting        | Badger 2350 (e-ink)                                                                                | Tufty 2350 (colour LCD)                                           |
+| -------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Display power  | Only while refreshing, so the app keeps refreshes rare (see [E-ink only](#e-ink-only-badger-2350)) | Always on; Badgeware sends a frame every loop                     |
+| Refresh policy | Settle, throttle and hold timings in [devices.md](devices.md#how-the-app-treats-each-display)      | The Badger's, for now (LCD profile planned)                       |
+| Backlight      | None                                                                                               | Dims to 0.1 after 60 s idle on battery; light sensor not used yet |
+| Case lights    | As in [USB power vs battery](#usb-power-vs-battery)                                                | Not implemented                                                   |
 
 ## E-ink only (Badger 2350)
 
@@ -89,8 +89,32 @@ thing: make as few refreshes as possible. The app does this in
    instead of drawing a "sending…" screen.
 
 None of this applies to an always-on LCD, where these rules only make
-the screen lag. That's why the Tufty will get its own profile (see
-[devices.md](devices.md)).
+the screen lag. The Tufty uses them for now and will get its own
+profile (see [devices.md](devices.md)). On the Tufty they save little
+power: the backlight is on and Badgeware sends a frame every loop
+either way. No measurements yet.
+
+## Tufty backlight
+
+The Tufty's LCD and backlight are on the whole time the app runs, and
+the backlight is likely its biggest draw. The app can't sleep while
+connected (see below), so on battery it dims the backlight instead
+(`buddy_backlight.py`):
+
+- **When:** after `BACKLIGHT_IDLE_MS` (60 s) with no button press and
+  nothing needing the user, from `BACKLIGHT_BRIGHT` (0.9, the
+  firmware's start-up level) to `BACKLIGHT_DIM` (0.1). The Bluetooth
+  link stays up.
+- **Back to bright:** a prompt or "Answer in the Claude App" (and it
+  stays bright until answered), any urgent screen change such as a
+  connection change, USB power, or a button press.
+- **First press while dim** only wakes the screen; A, B, C and paging
+  ignore it, so nothing happens that the user couldn't see.
+- **On USB power** it never dims.
+- **On exit** it goes back to bright, so the menu isn't left dim.
+
+Changing the backlight never repaints. No measurements yet of what it
+saves.
 
 ## Why the badge never sleeps
 
@@ -118,26 +142,29 @@ when you aren't using it: that turns the radio off.
 
 All in `apps/claude_buddy/` unless noted.
 
-| Constant                  | Value  | File             | Applies to | What it does                                         |
-| ------------------------- | ------ | ---------------- | ---------- | ---------------------------------------------------- |
-| `LOOP_SLEEP_MS`           | 20 ms  | `__init__.py`    | All        | CPU idle at the end of each loop pass (~50 passes/s) |
-| `BATTERY_POLL_MS`         | 10 s   | `__init__.py`    | All        | Battery ADC sample interval                          |
-| `URGENT_SETTLE_MS`        | 300 ms | `__init__.py`    | E-ink      | Settle before an urgent repaint                      |
-| `ANSWER_SETTLE_MS`        | 1 s    | `__init__.py`    | E-ink      | Hold after A/B                                       |
-| `STATUS_MIN_INTERVAL_MS`  | 15 s   | `__init__.py`    | E-ink      | Minimum gap between status-only repaints             |
-| `BLINK_MS`                | 150 ms | `__init__.py`    | All        | A/B acknowledge blink                                |
-| `BLINK_LEVEL`             | 0.6    | `__init__.py`    | All        | Case-light brightness                                |
-| `WAITING_BLIP_MS`         | 120 ms | `__init__.py`    | USB power  | Length of each blink in the waiting double blink     |
-| `WAITING_BLINK_REPEAT_MS` | 5 s    | `__init__.py`    | USB power  | Waiting double-blink period                          |
-| `_ADV_INTERVAL_US`        | 100 ms | `buddy_ble.py`   | All        | BLE advertising interval while unconnected           |
-| `_ADV_RETRY_MS`           | 2 s    | `buddy_ble.py`   | All        | Retry after advertising fails to start               |
-| `BATTERY_STEP`            | 25%    | `buddy_model.py` | Battery    | Header percentage step                               |
-| `BATTERY_LOW_PCT`         | 20%    | `buddy_model.py` | Battery    | Becomes "low": 5% steps, repaints on its own         |
-| `BATTERY_LOW_CLEAR_PCT`   | 25%    | `buddy_model.py` | Battery    | Stops being "low"                                    |
-| `BATTERY_LOW_STEP`        | 5%     | `buddy_model.py` | Battery    | Header step while low                                |
-| `BATTERY_FULL_PCT`        | 95%    | `buddy_model.py` | USB power  | `Full` instead of `USB` when not charging            |
-| `NO_SESSIONS_DELAY_MS`    | 5 s    | `buddy_model.py` | E-ink      | Delay before the "No sessions" screen                |
-| `DEAD_LINK_MS`            | 60 s   | `buddy_model.py` | All        | Drop a silent link and advertise again               |
+| Constant                  | Value  | File             | Applies to      | What it does                                         |
+| ------------------------- | ------ | ---------------- | --------------- | ---------------------------------------------------- |
+| `LOOP_SLEEP_MS`           | 20 ms  | `__init__.py`    | All             | CPU idle at the end of each loop pass (~50 passes/s) |
+| `BATTERY_POLL_MS`         | 10 s   | `__init__.py`    | All             | Battery ADC sample interval                          |
+| `URGENT_SETTLE_MS`        | 300 ms | `__init__.py`    | E-ink           | Settle before an urgent repaint                      |
+| `ANSWER_SETTLE_MS`        | 1 s    | `__init__.py`    | E-ink           | Hold after A/B                                       |
+| `STATUS_MIN_INTERVAL_MS`  | 15 s   | `__init__.py`    | E-ink           | Minimum gap between status-only repaints             |
+| `BLINK_MS`                | 150 ms | `__init__.py`    | All             | A/B acknowledge blink                                |
+| `BLINK_LEVEL`             | 0.6    | `__init__.py`    | All             | Case-light brightness                                |
+| `WAITING_BLIP_MS`         | 120 ms | `__init__.py`    | USB power       | Length of each blink in the waiting double blink     |
+| `WAITING_BLINK_REPEAT_MS` | 5 s    | `__init__.py`    | USB power       | Waiting double-blink period                          |
+| `BACKLIGHT_IDLE_MS`       | 60 s   | `__init__.py`    | Battery (Tufty) | Idle time before the backlight dims                  |
+| `BACKLIGHT_BRIGHT`        | 0.9    | `__init__.py`    | Tufty           | Normal backlight level (firmware default, 230/255)   |
+| `BACKLIGHT_DIM`           | 0.1    | `__init__.py`    | Battery (Tufty) | Dimmed backlight level                               |
+| `_ADV_INTERVAL_US`        | 100 ms | `buddy_ble.py`   | All             | BLE advertising interval while unconnected           |
+| `_ADV_RETRY_MS`           | 2 s    | `buddy_ble.py`   | All             | Retry after advertising fails to start               |
+| `BATTERY_STEP`            | 25%    | `buddy_model.py` | Battery         | Header percentage step                               |
+| `BATTERY_LOW_PCT`         | 20%    | `buddy_model.py` | Battery         | Becomes "low": 5% steps, repaints on its own         |
+| `BATTERY_LOW_CLEAR_PCT`   | 25%    | `buddy_model.py` | Battery         | Stops being "low"                                    |
+| `BATTERY_LOW_STEP`        | 5%     | `buddy_model.py` | Battery         | Header step while low                                |
+| `BATTERY_FULL_PCT`        | 95%    | `buddy_model.py` | USB power       | `Full` instead of `USB` when not charging            |
+| `NO_SESSIONS_DELAY_MS`    | 5 s    | `buddy_model.py` | E-ink           | Delay before the "No sessions" screen                |
+| `DEAD_LINK_MS`            | 60 s   | `buddy_model.py` | All             | Drop a silent link and advertise again               |
 
 ## Planned (Phase 3)
 
@@ -149,5 +176,6 @@ consider:
 - a slower loop when idle;
 - on battery, sleeping after a few minutes with no Claude Desktop
   connection, until a button is pressed;
-- on the Tufty, dimming the backlight when idle and using the light
-  sensor.
+- on the Tufty, using the light sensor to set the backlight level
+  (dimming when idle on battery is done; see
+  [Tufty backlight](#tufty-backlight)).

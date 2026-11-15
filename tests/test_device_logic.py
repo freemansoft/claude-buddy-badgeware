@@ -23,31 +23,54 @@ class FakeScreen:
     def __init__(self):
         self.drawn = []
         self.rects = []
+        self.sizes = []  # font_size of every measure and draw
+        self.pens = {}  # text -> the pen it was drawn with
         self.font = None
         self.pen = None
 
-    @staticmethod
-    def _check_escaped(text):
-        # Badgeware reads a lone "[" as the start of a glyph tag; the
-        # view must escape it as "[[" before measuring or drawing.
-        if "[" in text.replace("[[", ""):
+    # True: firmware where "[" starts a glyph tag and "[[" is one literal
+    # "[". False: firmware that draws brackets as they are (Badgeware
+    # v3.1.1, as seen on a Tufty).
+    markup = True
+
+    def _check_escaped(self, text):
+        # With markup, a lone "[" starts a glyph tag; the view must
+        # escape it as "[[" before measuring or drawing.
+        if self.markup and "[" in text.replace("[[", ""):
             raise AssertionError("unescaped markup: {!r}".format(text))
 
-    def measure_text(self, text):
+    def measure_text(self, text, font_size=0):
+        self.sizes.append(font_size)
+        if text in ("[", "[["):  # the view's markup probe
+            return ((1 if self.markup else len(text)) * CHAR_W, 12)
         self._check_escaped(text)
-        # "[[" is one literal "[" once markup is parsed.
-        return (len(text.replace("[[", "[")) * CHAR_W, 12)
+        # With markup, "[[" is one literal "[".
+        shown = text.replace("[[", "[") if self.markup else text
+        return (len(shown) * CHAR_W, 12)
 
-    def text(self, text, x, y):
+    def text(self, text, x, y, font_size=0):
         self._check_escaped(text)
         self.drawn.append((text, x, y))
+        self.pens[text] = self.pen
+        self.sizes.append(font_size)
 
     def clear(self):
         self.drawn = []
         self.rects = []
+        self.pens = {}
 
     def rectangle(self, *args):
         self.rects.append(tuple(args))
+
+
+# Vector font files the fake font.load() treats as missing.
+MISSING_FONTS = set()
+
+
+def _load_font(path):
+    if path in MISSING_FONTS:
+        raise OSError(2, "no such file")
+    return types.SimpleNamespace(path=path)
 
 
 def install_badgeware_stubs():
@@ -57,6 +80,9 @@ def install_badgeware_stubs():
         nope=types.SimpleNamespace(height=13),
         winds=types.SimpleNamespace(height=12),
         absolute=types.SimpleNamespace(height=16),
+        smart=types.SimpleNamespace(height=16),
+        curse=types.SimpleNamespace(height=20),
+        load=_load_font,
     )
     builtins.color = types.SimpleNamespace(
         white="white", black="black", dark_grey="dark_grey", rgb=lambda *a: a
@@ -171,6 +197,15 @@ class WrapTest(unittest.TestCase):
     def test_escape(self):
         self.assertEqual(buddy_view.escape("[pen:1,2,3]x"), "[[pen:1,2,3]x")
 
+    def test_no_escaping_where_firmware_has_no_markup(self):
+        FakeScreen.markup = False
+        self.addCleanup(setattr, FakeScreen, "markup", True)
+        view = buddy_view.BuddyView()
+        view.draw(make_scr(kind="status", lines=(("w", "[pen:1,2,3]x [ -f a ]"),)))
+        texts = [t for t, _, _ in screen.drawn]
+        self.assertTrue(any("[pen:1,2,3]x" in t for t in texts))
+        self.assertFalse(any("[[" in t for t in texts))
+
     def test_draw_escapes_markup(self):
         scr = make_scr(kind="prompt", title="Allow Bash?",
                        lines=(("w", "echo [pen:0,0,0]"),), actionable=True)
@@ -222,7 +257,7 @@ class WrapTest(unittest.TestCase):
     def test_exit_label_stays_in_right_third(self):
         self.view.draw(make_scr(battery=""))
         (x,) = [x for t, x, _ in screen.drawn if t == "C: Exit"]
-        self.assertGreaterEqual(x, 2 * (264 // 3))
+        self.assertGreaterEqual(x, 2 * (self.view.w // 3))
 
     def test_charging_label_fits_header(self):
         for status in ("Connected", "Not connected", "No data"):
@@ -238,7 +273,7 @@ class WrapTest(unittest.TestCase):
 
     def frame_bars(self):
         """Rectangles other than the two 1 px full-width dividers."""
-        return [r for r in screen.rects if not (r[2] == 264 and r[3] == 1)]
+        return [r for r in screen.rects if not (r[2] == self.view.w and r[3] == 1)]
 
     def test_not_connected_screens_are_framed(self):
         for title in ("Pair with Claude", "Disconnected"):
@@ -254,7 +289,7 @@ class WrapTest(unittest.TestCase):
             for x, y, w, h in bars:
                 # Inset from the edges and dividers, with space round it.
                 self.assertGreaterEqual(x, buddy_view.FRAME_MARGIN_X)
-                self.assertLessEqual(x + w, 264 - buddy_view.FRAME_MARGIN_X)
+                self.assertLessEqual(x + w, self.view.w - buddy_view.FRAME_MARGIN_X)
                 self.assertGreater(y, self.view.top_rule + buddy_view.FRAME_MARGIN_Y)
                 self.assertLessEqual(y + h, self.view.bottom_rule - buddy_view.FRAME_MARGIN_Y)
 
@@ -300,7 +335,8 @@ class WrapTest(unittest.TestCase):
         self.assertEqual(len(horizontal), 3)
         rule = horizontal[1]
         self.assertEqual(rule[3], buddy_view.TITLE_RULE_W)
-        _, iy = pos["In Claude Desktop: Developer > Open"]
+        # The first instructions line (where it wraps depends on width).
+        iy = min(y for t, (_, y) in pos.items() if t.startswith("In Claude Desktop"))
         self.assertGreater(rule[1], ty + self.view.h_title - 1)
         self.assertLess(rule[1] + rule[3], iy)
         # The instructions stay left-aligned.
@@ -320,8 +356,9 @@ class WrapTest(unittest.TestCase):
         self.assertEqual(self.view.page_count(scr), 1)
 
     def test_identifier_never_truncated_when_header_is_tight(self):
-        # 264 px / 6 px per char = 44 chars across; make it overflow.
-        scr = make_scr(kind="pair", status="Not connected to anything at all",
+        # 264 px / 6 px per char = 44 chars across (53 on the Tufty's
+        # 320 px); make it overflow on both.
+        scr = make_scr(kind="pair", status="Not connected to anything at all, really",
                        title="", battery="100%")
         texts = self.draw_texts(scr)
         self.assertIn("Claude_A1B2C3", texts)
@@ -331,6 +368,80 @@ class WrapTest(unittest.TestCase):
 
 # Long prompt: 60 words of 9 chars -> ~5 words per 256 px line -> ~12 lines.
 LONG = " ".join("word{:05d}".format(i) for i in range(60))
+
+
+class TuftyViewTest(WrapTest):
+    """Every WrapTest again on the Tufty: 320x240, with its own fonts
+    and colours. The layout is derived from the screen size and font
+    heights, so the same checks must hold."""
+
+    def setUp(self):
+        FakeScreen.width, FakeScreen.height = 320, 240
+        builtins.badge.model = "tufty"
+        buddy_view._loaded.clear()
+        self.addCleanup(self._back_to_badger)
+        super().setUp()
+
+    @staticmethod
+    def _back_to_badger():
+        FakeScreen.width, FakeScreen.height = 264, 176
+        builtins.badge.model = "badger"
+
+    def test_uses_the_tufty_size_fonts_and_colours(self):
+        self.assertEqual((self.view.w, self.view.h), (320, 240))
+        # MonaSans (vector) at 18 px bar, 24 px title, 20 px body.
+        for face, size in ((self.view.f_bar, 18), (self.view.f_title, 24),
+                           (self.view.f_body, 20)):
+            self.assertEqual(face.font.path, buddy_view.MONA)
+            self.assertEqual((face.size, face.height), (size, size))
+        self.assertEqual((self.view.theme.bg, self.view.theme.fg), ("black", "white"))
+        # Taller fonts, so taller header and footer bars than the Badger's.
+        self.assertEqual(self.view.top_rule, 18 + 4)
+        self.assertEqual(self.view.bottom_rule, 240 - 22 - 1)
+
+    def test_fixed_parts_are_coloured(self):
+        t = self.view.theme
+        self.assertEqual(len({t.fg, t.title, t.footer, t.meta}), 4)
+        scr = make_scr(kind="prompt", title="Allow Bash?", actionable=True,
+                       lines=(("w", "ls"), ("c", "1 running")), tokens="31k today")
+        self.view.draw(scr)
+        pens = screen.pens
+        self.assertEqual(pens["Allow Bash?"], t.title)
+        self.assertEqual(pens["ls"], t.fg)
+        self.assertEqual(pens["A: Accept"], t.footer)
+        self.assertEqual(pens["C: Exit"], t.footer)
+        self.assertEqual(pens["1 running, 31k today"], t.meta)
+        self.assertEqual(pens["Claude_A1B2C3"], t.fg)  # header stays white
+
+    def test_vector_text_is_measured_and_drawn_at_its_size(self):
+        screen.sizes.clear()
+        self.view.draw(make_scr(kind="status", title="Done",
+                                lines=(("w", "Claude: all done."),)))
+        self.assertTrue(screen.sizes)
+        self.assertTrue(set(screen.sizes) <= {18, 20, 24}, set(screen.sizes))
+
+    def test_falls_back_to_pixel_fonts_without_the_font_file(self):
+        MISSING_FONTS.add(buddy_view.MONA)
+        self.addCleanup(MISSING_FONTS.clear)
+        buddy_view._loaded.clear()
+        view = buddy_view.BuddyView()
+        self.assertIs(view.f_bar.font, font.smart)
+        self.assertIs(view.f_title.font, font.curse)
+        self.assertEqual((view.f_body.size, view.h_body), (0, 16))
+
+
+class BadgerFontTest(unittest.TestCase):
+    def test_badger_keeps_its_pixel_fonts_unscaled(self):
+        view = buddy_view.BuddyView()
+        self.assertIs(view.f_bar.font, font.nope)
+        self.assertIs(view.f_title.font, font.absolute)
+        self.assertIs(view.f_body.font, font.nope)
+        screen.sizes.clear()
+        view.draw(make_scr(kind="status", title="Done", lines=(("w", "all done"),)))
+        # A size passed to a pixel font would scale it up by that factor.
+        self.assertEqual(set(screen.sizes), {0})
+        # Everything black: grey or colour doesn't work on its e-ink.
+        self.assertEqual(set(screen.pens.values()), {"black"})
 
 
 class PagingTest(unittest.TestCase):

@@ -1,7 +1,8 @@
 """Draws the Claude Buddy screen with the Badgeware drawing API.
 
-Layout (Badger 2350, 264x176; everything is derived from screen size
-and font heights so the Tufty 2350 can reuse it):
+Layout (shown for the Badger 2350, 264x176; everything is derived
+from screen size and font heights, so the Tufty 2350 at 320x240 uses
+the same layout with its own fonts and colours):
 
     +------------------------------------------+
     | Claude_A1B2C3              75% Connected |  header: id, battery, link
@@ -54,9 +55,23 @@ FRAME_GAP = 4  # space between the frame and the text
 # Inside the frame the title is centred, with a rule across the frame
 # between it and the instructions, FRAME_GAP each side.
 TITLE_RULE_W = 2  # thickness of that rule
-BAR_FONT = "nope"
-TITLE_FONT = "absolute"
-BODY_FONT = "nope"
+# Fonts per badge.model, as (bar, title, body); bar is the header and
+# footer. Each is a list of choices, and the first that loads is used:
+# a ROM pixel font by name (one fixed size), or (path, px) for a vector
+# font file drawn at that size.
+#
+# The Badger uses pixel fonts sized for its 264x176 panel. On the Tufty
+# the pixel fonts were too small to read comfortably (its pixels are
+# smaller: about 143 per inch against the Badger's 117), so it uses
+# MonaSans, a vector font that ships with its firmware: 18 px for the
+# header and footer (the largest that still fits them), 24 px titles
+# and 20 px body, sizes picked on the device. The pixel fonts are the
+# fallback if the file isn't there.
+MONA = "/system/assets/fonts/MonaSans-Medium.af"
+FONTS = {
+    "badger": (("nope",), ("absolute",), ("nope",)),
+    "tufty": (((MONA, 18), "smart"), ((MONA, 24), "curse"), ((MONA, 20), "smart")),
+}
 TITLE_MAX_LINES = 2
 LINE_GAP = 2
 HEADER_GAP = 8
@@ -67,7 +82,10 @@ MAX_WRAP_LINES = 400
 # Shorter count labels for the bottom row when the full ones don't fit.
 _SHORT_LABELS = ((" running", " run"), (" waiting", " wait"))
 # Footer text in place of A/B when Claude waits for an approval the
-# badge can't answer (163 px in nope; 188 px fit before "C: Exit").
+# badge can't answer. The footer measures it and cuts it with "..." if
+# it doesn't fit before "C: Exit" (it fits on both badges: 163 of
+# 188 px in nope on the Badger, 191 of about 210 px in 18 px MonaSans
+# on the Tufty).
 APP_ONLY_NOTE = "Answer in the Claude App"
 
 # Unicode punctuation Claude commonly sends, mapped to ASCII the ROM
@@ -111,43 +129,97 @@ def escape(text):
     return text.replace("[", "[[")
 
 
-def _font(name):
-    f = getattr(font, name, None)
-    return f if f is not None else font.sins
+def _markup_active():
+    """True if text() parses "[" as glyph markup, so "[[" draws one "[".
+
+    picovector documents this markup, but on Badgeware v3.1.1
+    (picovector v3.1.0) "[[" measures and draws as two brackets, even
+    with a glyph registered. Escaping there would show every "[" from
+    Claude doubled, so the view only escapes when "[[" really is one
+    bracket wide. Uses the current screen.font."""
+    try:
+        return screen.measure_text("[[")[0] == screen.measure_text("[")[0]
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _height(f, fallback=12):
     return int(getattr(f, "height", fallback) or fallback)
 
 
+class Face:
+    """A font at a size. ``size`` is 0 for a ROM pixel font (it has one
+    size; passing a size would scale it up by that factor) or the pixel
+    size a vector font is drawn at. ``height`` is the line height."""
+
+    def __init__(self, f, size, height):
+        self.font = f
+        self.size = size
+        self.height = height
+
+
+_loaded = {}
+
+
+def _face(choices):
+    """The first of ``choices`` that loads (see FONTS)."""
+    for choice in choices:
+        if isinstance(choice, str):
+            f = getattr(font, choice, None)
+            if f is not None:
+                return Face(f, 0, _height(f))
+            continue
+        path, size = choice
+        try:
+            if path not in _loaded:
+                _loaded[path] = font.load(path)
+            return Face(_loaded[path], size, size)
+        except Exception as e:  # noqa: BLE001
+            print("claude_buddy: font", path, "not loaded:", e)
+    return Face(font.sins, 0, _height(font.sins))
+
+
 class Theme:
-    """Colours per badge. The Badger is black on white with no greys
-    (grey text was too faint on e-ink); the Tufty (Phase 2, not yet
-    built) is light on dark."""
+    """Colours per badge. ``fg`` is the header, body text, dividers and
+    frame; ``title``, ``footer`` (button labels) and ``meta`` (counts,
+    tokens and page number) set the fixed parts apart from the body.
+
+    The Badger is black on white with no greys (grey text was too faint
+    on e-ink), so every part is black. The Tufty is white on black,
+    Badgeware's own default for it, with coloured titles, button labels
+    and info line."""
 
     def __init__(self, model):
         if model == "badger":
             self.bg = color.white
             self.fg = color.black
-        else:  # Tufty (colour LCD): light on dark
+            self.title = self.footer = self.meta = self.fg
+        else:  # Tufty (colour LCD): white on black
             self.bg = color.black
             self.fg = color.white
+            self.title = color.rgb(217, 119, 87)  # Claude orange
+            self.footer = color.rgb(110, 190, 255)  # light blue
+            self.meta = color.rgb(140, 220, 140)  # light green
 
 
 class BuddyView:
     """Draws one screen tuple into the framebuffer. It never pushes to
     the panel (that's the painter's job, and the expensive part on
-    e-ink). Layout is derived from the screen size and font heights so
-    the Tufty can reuse it."""
+    e-ink). Layout is derived from the screen size and font heights, so
+    both badges share it; only the fonts and colours differ."""
 
     def __init__(self):
         self.theme = Theme(badge.model)
-        self.f_bar = _font(BAR_FONT)
-        self.f_title = _font(TITLE_FONT)
-        self.f_body = _font(BODY_FONT)
-        self.h_bar = _height(self.f_bar)
-        self.h_title = _height(self.f_title)
-        self.h_body = _height(self.f_body)
+        bar, title, body = FONTS.get(badge.model, FONTS["badger"])
+        self.f_bar = _face(bar)
+        self.f_title = _face(title)
+        self.f_body = _face(body)
+        self.h_bar = self.f_bar.height
+        self.h_title = self.f_title.height
+        self.h_body = self.f_body.height
+        self._size = 0
+        self._use(self.f_body)
+        self._markup = _markup_active()
 
         self.w = screen.width
         self.h = screen.height
@@ -174,8 +246,18 @@ class BuddyView:
 
     # -- text helpers -----------------------------------------------------
 
+    def _use(self, face):
+        """Make ``face`` the font for the following measures and draws."""
+        screen.font = face.font
+        self._size = face.size
+
+    def _esc(self, text):
+        return escape(text) if self._markup else text
+
     def _width(self, text):
-        return int(screen.measure_text(escape(text))[0])
+        if self._size:
+            return int(screen.measure_text(self._esc(text), font_size=self._size)[0])
+        return int(screen.measure_text(self._esc(text))[0])
 
     def _split_long(self, word, width):
         """Hard-break one word wider than ``width`` into pieces."""
@@ -228,7 +310,10 @@ class BuddyView:
         return lines
 
     def _text(self, text, x, y):
-        screen.text(escape(text), int(x), int(y))
+        if self._size:
+            screen.text(self._esc(text), int(x), int(y), font_size=self._size)
+        else:
+            screen.text(self._esc(text), int(x), int(y))
 
     # -- drawing ----------------------------------------------------------
 
@@ -282,7 +367,7 @@ class BuddyView:
         Claude Desktop's picker. Low battery shows in 5% steps (see
         BuddyModel.battery_label).
         """
-        screen.font = self.f_bar
+        self._use(self.f_bar)
         y = (self.top_rule - self.h_bar) // 2
         name = plain(name)
         status = plain(status)
@@ -316,8 +401,8 @@ class BuddyView:
         answer (no prompt sent, or a prompt on a stale "No data" link),
         their space says so instead (APP_ONLY_NOTE).
         """
-        screen.font = self.f_bar
-        screen.pen = self.theme.fg
+        self._use(self.f_bar)
+        screen.pen = self.theme.footer
         third = self.w // 3
         y = self.bottom_rule + 1 + (self.h - self.bottom_rule - 1 - self.h_bar) // 2
         labels = ("A: Accept", "B: Deny", "C: Exit") if actionable else (None, None, "C: Exit")
@@ -355,7 +440,7 @@ class BuddyView:
             return self._layout_value
 
         _, body_w, body_top, body_bottom = area
-        screen.font = self.f_title
+        self._use(self.f_title)
         title_lines = self.wrap(title, body_w, TITLE_MAX_LINES) if title else []
         top = body_top
         if title_lines:
@@ -365,7 +450,7 @@ class BuddyView:
             else:
                 top += LINE_GAP * 2
 
-        screen.font = self.f_body
+        self._use(self.f_body)
         rows = []
         counts = None
         for mode, text in lines:
@@ -419,7 +504,8 @@ class BuddyView:
         body_x, body_w = area[0], area[1]
         framed = area is self.framed_area
 
-        screen.font = self.f_title
+        self._use(self.f_title)
+        screen.pen = self.theme.title
         y = area[2]
         for line in title_lines:
             x = body_x
@@ -427,10 +513,11 @@ class BuddyView:
                 x += (body_w - self._width(line)) // 2
             self._text(line, x, y)
             y += self.h_title
+        screen.pen = self.theme.fg
         if framed and title_lines:
             self._draw_title_rule(y + FRAME_GAP)
 
-        screen.font = self.f_body
+        self._use(self.f_body)
         y = top
         for row in pages[page]:
             if row is None:
@@ -450,6 +537,7 @@ class BuddyView:
         text = ", ".join(part for part in (counts, tokens if counts is not None else "") if part)
         if not text and not marker:
             return
+        screen.pen = self.theme.meta
         body_x, body_w, _, body_bottom = area
         y = body_bottom - self.h_body + 1
         room = body_w

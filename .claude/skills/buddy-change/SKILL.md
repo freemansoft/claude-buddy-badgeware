@@ -58,18 +58,26 @@ in the invariants reference.
 
 ### Device and display split
 
-The Tufty 2350 has **no display code yet**; it is planned for phase 2.
-Today the app checks `badge.model` in two places (`_is_badger()` in
-`__init__.py`, `Theme` in `buddy_view.py`) and both Tufty branches are
-untested placeholders.
+The Tufty 2350 runs the app at 320×240 with its own fonts and colours
+(`FONTS` and `Theme` in `buddy_view.py`) but the Badger's refresh
+rules; a live LCD profile in the painter is the next step. The app
+checks `badge.model` in `__init__.py` (`MODELS`, `_is_badger()`) and
+`buddy_view.py`. On the Tufty, Badgeware's `run()` clears and sends
+the screen every loop; `badge.default_clear = None` keeps the last
+paint on screen, so don't remove it. It also polls the buttons every
+loop, so `update()` must not poll again there (`_RUN_POLLS`), or every
+press is lost.
 
 - Keep `buddy_model.py` display-agnostic: no `badge.model`, no
   timings that only make sense for e-ink.
 - Put refresh decisions in `buddy_painter.py`, where phase 2 will add a
   display profile. Don't scatter new `if badger:` checks elsewhere.
-- Don't write Tufty display code unless asked. If a change needs a
-  Tufty decision, record it in `docs/devices.md` as _Not implemented_
-  with the plan, rather than guessing at code that can't be tested.
+- Check layout changes at both sizes: `TuftyViewTest` in
+  `tests/test_device_logic.py` reruns the view tests at 320×240. On
+  hardware, the Tufty needs a look as well as the Badger.
+- If a change needs a Tufty decision you can't try on the device,
+  record it in `docs/devices.md` as _Not implemented_ with the plan,
+  rather than guessing.
 - If a change makes the two badges behave differently, add a row to
   `docs/devices.md` in the same change.
 

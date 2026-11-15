@@ -49,11 +49,21 @@ breaks at that rate.
 | Lights only change hardware on a level change                   | `tick()` runs 50 times a second                                          | `buddy_lights.py` `CaseLights.tick`          | `test_only_changes_reach_hardware`                                |
 | A/B blink instead of a "sending…" screen                        | Instant feedback without an extra e-ink refresh                          | `CaseLights.ack`                             | `test_ack_blink`                                                  |
 
+## Backlight (Tufty)
+
+| Rule                                                    | Why                                                        | Where                                        | Protected by                                                                          |
+| ------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Dims after `BACKLIGHT_IDLE_MS` on battery; never on USB | The always-on backlight is likely the Tufty's biggest draw | `buddy_backlight.py` `Backlight.tick`        | `test_dims_after_idle_on_battery`, `test_never_dims_on_usb`                           |
+| Bright while a prompt waits or after an urgent change   | The user must see what needs them                          | `__init__.py` `backlight.tick(..., keep_on)` | `test_stays_bright_while_something_needs_the_user`, `test_keep_on_wakes_a_dim_screen` |
+| First press while dim only wakes                        | A/B/C must never act on a screen the user can't see        | `__init__.py` `woke`; `Backlight.press`      | `test_first_press_while_dim_only_wakes`                                               |
+| Only level changes reach the hardware                   | `tick()` runs 50 times a second                            | `Backlight._apply`                           | `test_only_changes_reach_the_hardware`                                                |
+| Back to bright on exit                                  | The menu mustn't be left dim                               | `on_exit()`; `Backlight.restore`             | `test_restore_on_exit`                                                                |
+
 ## Planned (don't break the path to these)
 
 From the README roadmap and `docs/power.md`: a longer advertising
 interval, a lower CPU clock, a slower idle loop, sleeping while
-disconnected on battery (relaunch on button wake), and Tufty backlight
-dimming. Prefer changes that keep these easy: timings as named
-constants at the top of the module, and refresh decisions inside the
-painter.
+disconnected on battery (relaunch on button wake), and setting the
+Tufty backlight level from its light sensor. Prefer changes that keep
+these easy: timings as named constants at the top of the module, and
+refresh decisions inside the painter.
