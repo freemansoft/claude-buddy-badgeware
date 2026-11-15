@@ -52,8 +52,14 @@ class Refresh:
 
 
 # Every e-ink refresh is a 1-2 s full-screen flash, so changes are
-# batched and status updates throttled.
-EINK_REFRESH = Refresh(settle_ms=300, status_interval_ms=15000, answer_hold_ms=1000)
+# batched and status updates throttled: at most every 10 s on battery,
+# where each refresh costs charge.
+EINK_REFRESH = Refresh(settle_ms=300, status_interval_ms=10000, answer_hold_ms=1000)
+
+# The Badger on USB power: the same, but status updates at most every
+# 5 s. Power is free, so only the flashing limits it; Claude's reply and
+# the summary then lag by at most ~5 s plus the refresh.
+EINK_USB_REFRESH = Refresh(settle_ms=300, status_interval_ms=5000, answer_hold_ms=1000)
 
 # An LCD redraws instantly without flashing, so show every change as it
 # happens. Heartbeats arrive every ~100 ms but are almost all identical,
@@ -132,7 +138,7 @@ BADGER = Profile(
     fonts=(("nope",), ("absolute",), ("nope",)),
     theme={"bg": "white", "fg": "black", "title": "black", "footer": "black", "meta": "black"},
     backlight=None,
-    refresh_usb=EINK_REFRESH,
+    refresh_usb=EINK_USB_REFRESH,
     refresh_battery=EINK_REFRESH,
 )
 

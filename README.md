@@ -240,7 +240,8 @@ short:
 - **Few e-ink refreshes.** Every Badger refresh is a full-screen flash
   of about 1–2 s, so the panel only refreshes when something you can
   see changes. A new prompt shows after about 0.3 s. Status-only
-  changes (summary, transcript, counts) show at most every 15 s.
+  changes (summary, transcript, counts) show at most every 5 s on
+  USB power and every 10 s on battery.
   Battery and tokens update along with other refreshes, so they can
   be a little out of date.
 - **No sleep while the app is open.** Sleeping would turn the radio
@@ -560,8 +561,9 @@ The Tufty's colour LCD redraws instantly without flashing, so on USB
 power it redraws **live**: Claude's status, the counts and today's
 tokens (in full, e.g. `31,204 today`) show as soon as they change. On
 battery it keeps the Badger's e-ink timings (status at most every
-15 s, tokens rounded), because every redraw costs power. The Badger
-uses the e-ink timings on both.
+10 s, tokens rounded), because every redraw costs power. The Badger
+uses the e-ink timings on both, with status at most every 5 s on USB
+power.
 
 The full comparison of the two displays, where the code switches, and
 what to check on a Tufty are in [docs/devices.md](docs/devices.md).

@@ -80,7 +80,8 @@ press is lost).
   timings that only make sense for e-ink.
 - Put refresh decisions in `buddy_painter.py` and their timings in
   the profile's `Refresh`. The Badger's must stay the e-ink timings
-  on both power sources (`test_profile.py` checks this).
+  on both power sources, never live; only its status throttle differs
+  (5 s on USB, 10 s on battery). `test_profile.py` checks this.
 - Check layout changes at both sizes: `TuftyViewTest` in
   `tests/test_device_logic.py` reruns the view tests at 320×240. On
   hardware, the Tufty needs a look as well as the Badger.

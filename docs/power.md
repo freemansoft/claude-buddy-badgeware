@@ -35,7 +35,7 @@ Most of the app behaves the same on both. These are the differences:
 | **Battery label in the header**          | `Charging`, `Full` (not charging, reading ≥ 95%), or `USB` (e.g. no battery fitted)                           | Percentage in 25% steps                                                                                          |
 | **Low-battery warning**                  | Never "low"                                                                                                   | Below 20%: 5% steps, and the label repaints on its own. Stays low until the reading is back to 25% (hysteresis). |
 | **Sleep**                                | Never                                                                                                         | Never (planned: sleep while disconnected; see [Planned](#planned-phase-3))                                       |
-| **Refresh policy**                       | Badger: e-ink timings. Tufty: live (redraws on any change, exact token count)                                 | E-ink timings on both badges (urgent changes settle 300 ms, status at most every 15 s)                           |
+| **Refresh policy**                       | Badger: e-ink timings, status at most every 5 s. Tufty: live (redraws on any change, exact token count)       | E-ink timings on both badges (urgent changes settle 300 ms, status at most every 10 s)                           |
 | **Tufty backlight**                      | Always bright (0.9)                                                                                           | Dims to 0.1 after 60 s idle (see [Tufty backlight](#tufty-backlight))                                            |
 | **Loop rate, radio**                     | Same                                                                                                          | Same                                                                                                             |
 
@@ -77,7 +77,9 @@ thing: make as few refreshes as possible. The app does this in
 3. **Urgent changes settle for 300 ms** (a new prompt, a connection
    change, the stale-link warning), so a burst becomes one refresh.
 4. **Status-only changes** (summary, transcript lines, counts) are
-   coalesced into at most one refresh every 15 s.
+   coalesced into at most one refresh every 10 s on battery. On USB
+   power the Badger allows one every 5 s: power is free there, so
+   only the flashing limits it.
 5. **One refresh per answer.** After A or B, the app waits ~1 s so
    Desktop's follow-up heartbeat lands in the same refresh.
 6. **"No sessions" waits 5 s**, so closing one session and opening
@@ -152,8 +154,9 @@ when you aren't using it: that turns the radio off.
 All in `apps/claude_buddy/` unless noted. The refresh timings and the
 backlight are per badge, in `buddy_profile.py`; the refresh timings
 are also per power source (`refresh_usb`, `refresh_battery`). The
-Badger uses the e-ink timings (`EINK_REFRESH`) on both; the Tufty uses
-`LIVE_REFRESH` (all zero, redraw on any change) on USB and
+Badger uses `EINK_USB_REFRESH` on USB and `EINK_REFRESH` on battery
+(the same e-ink timings apart from the status throttle); the Tufty
+uses `LIVE_REFRESH` (all zero, redraw on any change) on USB and
 `EINK_REFRESH` on battery.
 
 | Constant                       | Value  | File               | Applies to      | What it does                                                      |
@@ -162,7 +165,8 @@ Badger uses the e-ink timings (`EINK_REFRESH`) on both; the Tufty uses
 | `BATTERY_POLL_MS`              | 10 s   | `__init__.py`      | All             | Battery ADC sample interval                                       |
 | `Refresh.settle_ms`            | 300 ms | `buddy_profile.py` | E-ink timings   | Settle before an urgent repaint                                   |
 | `Refresh.answer_hold_ms`       | 1 s    | `buddy_profile.py` | E-ink timings   | Hold after A/B                                                    |
-| `Refresh.status_interval_ms`   | 15 s   | `buddy_profile.py` | E-ink timings   | Minimum gap between status-only repaints                          |
+| `Refresh.status_interval_ms`   | 10 s   | `buddy_profile.py` | E-ink timings   | Minimum gap between status-only repaints (battery)                |
+| `Refresh.status_interval_ms`   | 5 s    | `buddy_profile.py` | Badger on USB   | Minimum gap between status-only repaints (`EINK_USB_REFRESH`)     |
 | `Refresh.no_sessions_delay_ms` | 5 s    | `buddy_profile.py` | E-ink timings   | Wait before the "No sessions" screen                              |
 | `LIVE_REFRESH`                 | all 0  | `buddy_profile.py` | Tufty on USB    | Redraw on any change; exact token count                           |
 | `BLINK_MS`                     | 150 ms | `__init__.py`      | All             | A/B acknowledge blink                                             |
