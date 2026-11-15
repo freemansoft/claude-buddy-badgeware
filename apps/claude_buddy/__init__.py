@@ -27,8 +27,9 @@ APP_DIR = "/system/apps/claude_buddy"
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
+from buddy_backlight import Backlight  # noqa: E402
 from buddy_lights import CaseLights  # noqa: E402
-from buddy_model import ATTENTION_KINDS, S_KIND, BuddyModel  # noqa: E402
+from buddy_model import ATTENTION_KINDS, S_KIND, BuddyModel, is_urgent  # noqa: E402
 from buddy_painter import Painter  # noqa: E402
 from buddy_rxlog import RxLog  # noqa: E402
 from buddy_view import BuddyView  # noqa: E402
@@ -57,6 +58,14 @@ BLINK_MS = 150
 BLINK_LEVEL = 0.6
 WAITING_BLIP_MS = 120
 WAITING_BLINK_REPEAT_MS = 5000
+# Tufty backlight (no repaint): on battery, it dims after
+# BACKLIGHT_IDLE_MS with nothing needing the user and no button press,
+# and the first press only wakes it. Always bright on USB power. The
+# Badger has no backlight. Levels are 0-1; BACKLIGHT_BRIGHT is the
+# firmware's own start-up level (230 of 255).
+BACKLIGHT_BRIGHT = 0.9
+BACKLIGHT_DIM = 0.1
+BACKLIGHT_IDLE_MS = 60000
 
 STATE_KEY = "claude_buddy"
 # badge.model values this app has a layout for.
@@ -151,6 +160,21 @@ def _present():
     badge.first_update = False
 
 
+def _set_backlight(level):
+    """Tufty backlight, 0-1 (gamma-corrected by the driver; 0 is off)."""
+    try:
+        display.backlight(level)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
+def _any_button_pressed():
+    for button in (BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_UP, BUTTON_DOWN):
+        if badge.pressed(button):
+            return True
+    return False
+
+
 def _caselights(level):
     """Set the case lights (0 = off). Driven only by CaseLights, which
     calls this on changes, not every loop. The lights cost battery,
@@ -220,6 +244,14 @@ lights = CaseLights(
 )
 
 _started_ms = time.ticks_ms()
+backlight = Backlight(
+    None if _is_badger() else _set_backlight,
+    bright=BACKLIGHT_BRIGHT,
+    dim=BACKLIGHT_DIM,
+    idle_ms=BACKLIGHT_IDLE_MS,
+    now=_started_ms,
+)
+_last_scr = None
 _buttons_armed = False
 _next_battery_ms = _started_ms
 
@@ -274,8 +306,10 @@ def update():
        advertising while unconnected; flush the receive log.
     3. Buttons: C exits; A/B answer only the prompt on the panel
        (never one that hasn't been drawn), and not both at once.
-    4. Lights, paging, then the painter, which refreshes the e-ink only
-       when the screen key or page changed (see buddy_painter).
+    4. Lights, backlight, paging, then the painter, which refreshes the
+       e-ink only when the screen key or page changed (see
+       buddy_painter). While the Tufty's backlight is dim, the first
+       button press only wakes it and is otherwise ignored.
 
     Timing and power: each pass ends with LOOP_SLEEP_MS (20 ms), so
     buttons and BLE are serviced about 50 times a second. The app
@@ -284,7 +318,7 @@ def update():
     docs/power.md, "Why the badge never sleeps". Returning
     True exits to the menu.
     """
-    global _buttons_armed
+    global _buttons_armed, _last_scr
     # pressed() reports what changed since the previous poll. The
     # Tufty's run() has just polled, so polling again here would wipe
     # out every press it caught.
@@ -316,7 +350,10 @@ def update():
         # Latched once: comparing against _started_ms forever would turn
         # the buttons off again when the ticks wrap (~6 days).
         _buttons_armed = time.ticks_diff(now, _started_ms) >= STARTUP_IGNORE_MS
-    if _buttons_armed:
+    # A press while the backlight is dim only wakes the screen: the user
+    # can't see what A/B/C would act on.
+    woke = _buttons_armed and backlight.enabled and _any_button_pressed() and backlight.press(now)
+    if _buttons_armed and not woke:
         if badge.pressed(BUTTON_C):
             return True  # leave run(); Badgeware resets into the menu
         approve = badge.pressed(BUTTON_A)
@@ -338,7 +375,13 @@ def update():
         now,
         scr[S_KIND] in ATTENTION_KINDS and model.on_usb and not model.is_stale(now),
     )
-    if badge.pressed(BUTTON_DOWN):
+    # Bright while something needs the user or the screen just changed
+    # urgently (a prompt, a connection change); dims when idle.
+    backlight.tick(now, model.on_usb, scr[S_KIND] in ATTENTION_KINDS or is_urgent(scr, _last_scr))
+    _last_scr = scr
+    if woke:
+        pass
+    elif badge.pressed(BUTTON_DOWN):
         painter.turn(scr, 1)
     elif badge.pressed(BUTTON_UP):
         painter.turn(scr, -1)
@@ -350,6 +393,7 @@ def update():
 def on_exit():
     """Called by Badgeware on C (after run() returns) or HOME."""
     _caselights(0)
+    backlight.restore()
     rx_log.service(time.ticks_ms(), force=True)
     try:
         ble.close()

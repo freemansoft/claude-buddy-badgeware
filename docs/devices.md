@@ -17,18 +17,18 @@ both badges).
 
 ## Display hardware
 
-|                        | Badger 2350                                       | Tufty 2350                                                   |
-| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
-| Panel                  | E-ink, SSD1680 driver                             | Colour TFT LCD                                               |
-| Resolution in this app | 264×176                                           | 320×240 (`HIRES`)                                            |
-| Colours                | 4 greys                                           | Full colour                                                  |
-| Holds image unpowered  | Yes                                               | No: always on while the app runs                             |
-| Update                 | Full-screen 4-grey refresh, ~1–2 s, visible flash | Fast, no flash; Badgeware's `run()` sends a frame every loop |
-| Partial refresh        | No (the driver ignores the speed setting)         | Not needed                                                   |
-| Backlight              | None                                              | Yes. Not implemented (dim when idle is planned)              |
-| Light sensor           | Not used                                          | Front sensor. Not implemented (for backlight)                |
-| Power while static     | ~None for the panel                               | Panel and backlight draw all the time                        |
-| Main display cost      | The _number_ of refreshes                         | Backlight on-time                                            |
+|                        | Badger 2350                                       | Tufty 2350                                                    |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------- |
+| Panel                  | E-ink, SSD1680 driver                             | Colour TFT LCD                                                |
+| Resolution in this app | 264×176                                           | 320×240 (`HIRES`)                                             |
+| Colours                | 4 greys                                           | Full colour                                                   |
+| Holds image unpowered  | Yes                                               | No: always on while the app runs                              |
+| Update                 | Full-screen 4-grey refresh, ~1–2 s, visible flash | Fast, no flash; Badgeware's `run()` sends a frame every loop  |
+| Partial refresh        | No (the driver ignores the speed setting)         | Not needed                                                    |
+| Backlight              | None                                              | Yes. Dims after 60 s idle on battery (`buddy_backlight.py`)   |
+| Light sensor           | Not used                                          | Front sensor. Not implemented (plan: set the backlight level) |
+| Power while static     | ~None for the panel                               | Panel and backlight draw all the time                         |
+| Main display cost      | The _number_ of refreshes                         | Backlight on-time                                             |
 
 ## How the app treats each display
 
@@ -128,8 +128,7 @@ antialiasing off is untried there.
   tried separately.
 - How fast is a full redraw? This decides whether the LCD profile
   draws only on change or every frame.
-- What does `set_brightness()` do? In the Badger firmware it's an empty
-  stub; check [pimoroni/tufty2350](https://github.com/pimoroni/tufty2350).
+- How much does dimming the backlight save? No measurements yet.
 - What does the always-on display plus BLE draw from the battery?
 
 ## Adding to this page

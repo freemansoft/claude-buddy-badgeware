@@ -249,6 +249,12 @@ short:
   apps that sleep. Exit the app (C) when you aren't using it.
 - **Case lights on USB power only.** The "Claude is waiting" blink is
   off on battery.
+- **Tufty backlight dims when idle on battery.** After 60 s with no
+  button press and nothing needing you, the backlight dims; the link
+  to Claude Desktop stays up. A prompt or a connection change brightens
+  it again. While it's dim, the first button press only wakes the
+  screen and does nothing else, so you can't approve or exit unseen.
+  On USB power it stays bright.
 
 ## Install
 
@@ -470,11 +476,10 @@ done.
       `main.py` and needs testing.
     - Sleep isn't possible while connected (see
       [Why the badge never sleeps](docs/power.md#why-the-badge-never-sleeps)).
-  - **Tufty backlight:** dim it when idle (the LCD is always on, so
-    the backlight is likely its biggest draw), and use the front light
-    sensor. In the Badger firmware `set_brightness()` is an empty stub,
-    so check what the Tufty firmware provides
-    ([pimoroni/tufty2350](https://github.com/pimoroni/tufty2350)).
+  - **Tufty backlight:** dimming when idle on battery is done (see
+    [Power and screen refreshes](#power-and-screen-refreshes)). Still
+    to do: use the front light sensor to set the level, and measure
+    what dimming saves.
 - **Later:**
   - Raise the BLE link security if a future Badgeware firmware enables
     BTstack pairing/bonding. This will be its own piece of work and
