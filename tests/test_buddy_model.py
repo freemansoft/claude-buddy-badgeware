@@ -295,6 +295,26 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(scr[bm.S_KIND], bm.KIND_CONNECTED)  # not "approve: Bash"
         self.assertEqual((self.model.waiting, self.model.msg), (0, ""))
 
+    def test_no_sessions_delay_can_be_zero(self):
+        # The Tufty on USB power shows "No sessions" straight away.
+        self.model.no_sessions_delay_ms = 0
+        self.connect()
+        self.model.handle_line(heartbeat(total=1), 100)
+        self.model.handle_line(heartbeat(total=0, running=0), 1000)
+        self.assertEqual(self.model.screen(1000)[bm.S_KIND], bm.KIND_NO_SESSIONS)
+
+    def test_exact_tokens_label(self):
+        self.connect()
+        self.model.handle_line(heartbeat(tokens_today=31204), 100)
+        self.assertEqual(self.model.tokens_label(), "31k today")
+        self.model.exact_tokens = True
+        self.assertEqual(self.model.tokens_label(), "31,204 today")
+
+    def test_exact_tokens_grouping(self):
+        for n, text in ((0, "0"), (999, "999"), (1000, "1,000"), (31204, "31,204"),
+                        (1234567, "1,234,567")):
+            self.assertEqual(bm.exact_tokens(n), text)
+
     def test_no_sessions_screen_after_delay(self):
         self.connect()
         self.model.handle_line(heartbeat(total=1), 100)

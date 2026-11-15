@@ -7,9 +7,9 @@ start-up from ``badge.model`` (``PROFILES``). Nothing else in the app
 checks ``badge.model``.
 
 Refresh timings are per power source (``Profile.refresh(on_usb)``):
-the Badger's e-ink needs them on both, and a profile can relax them on
-USB power while keeping them on battery to save power. Today every
-profile uses the e-ink timings everywhere.
+the Badger's e-ink needs the slow, batched timings on both. The Tufty
+redraws live on USB power and keeps the e-ink timings on battery, where
+fewer redraws save power.
 
 Pure Python, so CPython tests can import this: colours are stored as
 names or tuples and resolved by the view, and the display mode is a
@@ -27,17 +27,40 @@ class Refresh:
       often.
     - ``answer_hold_ms``: after A/B, paint nothing for this long, so the
       result and Desktop's follow-up heartbeat share one paint.
+    - ``no_sessions_delay_ms``: total == 0 must last this long before
+      the "No sessions" screen (so closing one session and opening
+      another doesn't cost two paints).
+    - ``live``: repaint on any change to the screen, including the
+      battery and token labels, and show today's tokens in full
+      ("31,204"). Otherwise those labels ride along with other paints
+      and the token count is rounded ("31k").
     """
 
-    def __init__(self, settle_ms, status_interval_ms, answer_hold_ms):
+    def __init__(
+        self,
+        settle_ms,
+        status_interval_ms,
+        answer_hold_ms,
+        no_sessions_delay_ms=5000,
+        live=False,
+    ):
         self.settle_ms = settle_ms
         self.status_interval_ms = status_interval_ms
         self.answer_hold_ms = answer_hold_ms
+        self.no_sessions_delay_ms = no_sessions_delay_ms
+        self.live = live
 
 
 # Every e-ink refresh is a 1-2 s full-screen flash, so changes are
 # batched and status updates throttled.
 EINK_REFRESH = Refresh(settle_ms=300, status_interval_ms=15000, answer_hold_ms=1000)
+
+# An LCD redraws instantly without flashing, so show every change as it
+# happens. Heartbeats arrive every ~100 ms but are almost all identical,
+# so this still only redraws when something on screen changes.
+LIVE_REFRESH = Refresh(
+    settle_ms=0, status_interval_ms=0, answer_hold_ms=0, no_sessions_delay_ms=0, live=True
+)
 
 
 class Backlight:
@@ -136,9 +159,9 @@ TUFTY = Profile(
     },
     # 0.9 is the firmware's own start-up level (230 of 255).
     backlight=Backlight(bright=0.9, dim=0.1, idle_ms=60000),
-    # The Badger's timings for now; a live LCD profile is planned for
-    # USB power, keeping these on battery.
-    refresh_usb=EINK_REFRESH,
+    # Live on USB power; on battery the Badger's timings, since every
+    # redraw costs power.
+    refresh_usb=LIVE_REFRESH,
     refresh_battery=EINK_REFRESH,
 )
 

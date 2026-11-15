@@ -43,18 +43,25 @@ class ProfileTest(unittest.TestCase):
         b = bp.BADGER
         for refresh in (b.refresh(True), b.refresh(False)):
             self.assertEqual((refresh.settle_ms, refresh.status_interval_ms,
-                              refresh.answer_hold_ms), (300, 15000, 1000))
+                              refresh.answer_hold_ms, refresh.no_sessions_delay_ms),
+                             (300, 15000, 1000, 5000))
+            self.assertFalse(refresh.live)
         self.assertTrue(b.eink)
         self.assertEqual(b.mode(), FAST_UPDATE | NON_BLOCKING)
         self.assertIsNone(b.backlight)
         self.assertFalse(b.run_clears_screen or b.run_polls_buttons)
         self.assertEqual(set(b.theme.values()) - {"white"}, {"black"})
 
-    def test_tufty_for_now_keeps_the_badger_refresh_rules(self):
-        # The live LCD profile (on USB) isn't built yet.
+    def test_tufty_is_live_on_usb_and_eink_on_battery(self):
         t = bp.TUFTY
-        self.assertIs(t.refresh(True), bp.EINK_REFRESH)
-        self.assertIs(t.refresh(False), bp.EINK_REFRESH)
+        self.assertIs(t.refresh(True), bp.LIVE_REFRESH)
+        self.assertIs(t.refresh(False), bp.EINK_REFRESH)  # fewer redraws on battery
+
+    def test_live_refresh_has_no_delays(self):
+        r = bp.LIVE_REFRESH
+        self.assertTrue(r.live)
+        self.assertEqual((r.settle_ms, r.status_interval_ms, r.answer_hold_ms,
+                          r.no_sessions_delay_ms), (0, 0, 0, 0))
 
     def test_tufty_badgeware_quirks_and_backlight(self):
         t = bp.TUFTY

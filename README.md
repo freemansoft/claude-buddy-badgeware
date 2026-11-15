@@ -16,9 +16,9 @@ the badge's buttons.
 
 - **Targets:**
   - Badger 2350 (264×176, 4-grey e-ink);
-  - Tufty 2350 (320×240 colour LCD), with its own fonts and colours
-    but, for now, the Badger's refresh rules. A live display profile is
-    next; see [Phase 2 design](#phase-2-design-tufty-display-switch).
+  - Tufty 2350 (320×240 colour LCD), with its own fonts and colours.
+    It updates live on USB power and like the Badger on battery; see
+    [Phase 2 design](#phase-2-design-tufty-display-switch).
 - **Language:** MicroPython, running as a normal Badgeware app launched
   from the badge's menu.
 - **License:** MIT.
@@ -459,7 +459,8 @@ done.
 - **Phase 2: Tufty 2350.**
   - Step 1 (done): runs at 320×240 with its own fonts and colours,
     using the Badger's refresh rules.
-  - Next: a live LCD profile. See
+  - Step 2 (done): every badge difference in one profile per badge.
+  - Step 3 (done): live refresh on USB power. See
     [Phase 2 design](#phase-2-design-tufty-display-switch) below.
 - **Phase 3: power** (both badges). Measure first, then consider:
   - a longer advertising interval;
@@ -503,16 +504,20 @@ done.
 
 ### Phase 2 design: Tufty display switch
 
-The Tufty runs today with its own resolution, fonts and colours, but
-the Badger's e-ink refresh rules. Its colour LCD is always on and
-redraws without flashing, so those rules (which exist to avoid
-refreshes) only make it lag: status updates appear at most every 15 s.
-The next step adds a **display profile** chosen from `badge.model` and
-moves every refresh decision behind it.
+Every difference between the badges lives in a **profile** per badge
+(`apps/claude_buddy/buddy_profile.py`), chosen once from
+`badge.model`: display mode, fonts, colours, backlight, and refresh
+timings for USB power and for battery.
 
-The full comparison of the two displays, the planned Tufty profile,
-where the code switches, and what to check on a Tufty are in
-[docs/devices.md](docs/devices.md).
+The Tufty's colour LCD redraws instantly without flashing, so on USB
+power it redraws **live**: Claude's status, the counts and today's
+tokens (in full, e.g. `31,204 today`) show as soon as they change. On
+battery it keeps the Badger's e-ink timings (status at most every
+15 s, tokens rounded), because every redraw costs power. The Badger
+uses the e-ink timings on both.
+
+The full comparison of the two displays, where the code switches, and
+what to check on a Tufty are in [docs/devices.md](docs/devices.md).
 
 ## References
 

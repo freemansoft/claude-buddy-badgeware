@@ -320,6 +320,8 @@ def update():
     _poll_battery(now)
     refresh = profile.refresh(model.on_usb)
     painter.set_refresh(refresh)
+    model.no_sessions_delay_ms = refresh.no_sessions_delay_ms
+    model.exact_tokens = refresh.live
 
     for kind, payload in ble.poll():
         if kind == "line":

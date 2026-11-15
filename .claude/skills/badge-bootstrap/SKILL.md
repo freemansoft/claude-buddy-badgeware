@@ -122,10 +122,18 @@ python3 tools/install.py
 and eject the drive. The badge restarts into the menu, which lists
 Claude Buddy. `badge_info.py` should now say `installed`.
 
-On a **Tufty**, the app has no display support yet (phase 2; see
-`docs/devices.md`). It may run with untested placeholder settings or
-not draw properly. That's expected until the Tufty work lands; the
-point of bootstrapping now is a known-good firmware to build on.
+Both badges are supported. The Tufty's MonaSans font comes from the
+firmware's own filesystem (`/system/assets/fonts`); after a
+`--firmware-only` flash of a badge whose files are older, check the
+font is there, or the app falls back to the smaller pixel fonts (see
+`docs/devices.md`).
+
+**Updating the app without the buttons:** with the badge on USB in
+normal mode, `mpremote connect <port> exec "import _msc"` switches it
+to USB-drive mode (the same thing a double-tap of RESET does). The
+mpremote call hangs or fails as the serial port goes away; that's
+expected. Install, eject, then ask the user to press RESET once:
+ejecting doesn't restart a badge put into drive mode this way.
 
 ### 5. Record what changed
 
