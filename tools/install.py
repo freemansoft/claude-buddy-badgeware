@@ -6,7 +6,12 @@
 2. Run:  python3 tools/install.py            (finds the drive)
      or  python3 tools/install.py --dest /Volumes/BADGER
      or  python tools\\install.py --dest E:\\
-3. Eject the drive; the badge reboots into the menu.
+3. On macOS and Linux the script ejects the drive itself and the badge
+   restarts into the menu. On Windows, eject it from the taskbar.
+
+Never press RESET or unplug the badge before the drive is ejected: the
+computer writes to the drive lazily, and files cut short on the badge
+show up later as a SyntaxError when the app starts.
 
 Standard library only; works on macOS, Windows and Linux.
 """
@@ -15,6 +20,7 @@ import argparse
 import os
 import shutil
 import string
+import subprocess
 import sys
 from pathlib import Path
 
@@ -45,6 +51,51 @@ def _ignore_missing(func, path, exc_info):
         raise exc_info[1]
 
 
+def _run(cmd, run):
+    """Run ``cmd``; return its stdout, or None (printing why) on failure."""
+    try:
+        result = run(cmd, capture_output=True, text=True)
+    except OSError as e:  # the command isn't installed
+        print("{}: {}".format(cmd[0], e), file=sys.stderr)
+        return None
+    if result.returncode != 0:
+        print((result.stderr or result.stdout).strip(), file=sys.stderr)
+        return None
+    return result.stdout
+
+
+def eject(root, run=subprocess.run, platform=sys.platform):
+    """Eject the badge drive so every write reaches it before it restarts.
+
+    Copying returns once the data is in the computer's cache, not on the
+    badge. A RESET or unplug in that gap leaves truncated files (seen on
+    a Badger: several files cut to 4096 bytes, one FAT cluster), which
+    the app reports as a SyntaxError. Ejecting flushes everything first.
+    A badge put in drive mode by a double-tap of RESET then restarts into
+    the menu by itself; one put there over mpremote (import _msc) needs a
+    press of RESET, which is safe once ejected.
+
+    Returns True if the drive was ejected, False if the user must eject
+    it (a command failed, or an OS this doesn't handle). Windows isn't
+    handled; main() tells the user to eject from the taskbar instead.
+    """
+    if platform == "darwin":
+        return _run(["diskutil", "eject", str(root)], run) is not None
+    if platform.startswith("linux"):
+        # Find the block device while it's still mounted, unmount it,
+        # then power it off: power-off is the eject the badge sees.
+        # udisksctl works without root for a desktop automount.
+        device = _run(["findmnt", "-no", "SOURCE", str(root)], run)
+        if not device or not device.strip():
+            return False
+        device = device.strip()
+        return (
+            _run(["udisksctl", "unmount", "-b", device], run) is not None
+            and _run(["udisksctl", "power-off", "-b", device], run) is not None
+        )
+    return False
+
+
 def find_badge():
     candidates = []
     if os.name == "nt":
@@ -69,6 +120,7 @@ def find_badge():
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dest", help="root of the badge's USB drive (contains apps/ and main.py)")
+    parser.add_argument("--no-eject", action="store_true", help="leave the drive mounted (eject it yourself)")
     args = parser.parse_args()
 
     if args.dest:
@@ -88,7 +140,16 @@ def main():
         shutil.rmtree(target, onerror=_ignore_missing)
     shutil.copytree(SRC, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "._*"))
     print("Installed to", target)
-    print("Eject the drive; the badge restarts into the menu.")
+    if args.no_eject or os.name == "nt":
+        print("Eject the drive before pressing RESET or unplugging, or the copied")
+        print("files may be cut short. The badge then restarts into the menu.")
+    elif eject(root):
+        print("Ejected {}. The badge restarts into the menu; if it doesn't,".format(root))
+        print("press RESET (safe now).")
+    else:
+        print("Couldn't eject {}. Eject it yourself before pressing RESET or".format(root))
+        print("unplugging, or the copied files may be cut short.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
