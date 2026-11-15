@@ -1,4 +1,4 @@
-"""Claude Buddy for Badgeware (Badger 2350 and Tufty 2350).
+"""Claude Buddy on Badgeware (Badger 2350 and Tufty 2350).
 
 A Claude Desktop "Hardware Buddy": pairs over BLE (Nordic UART, line
 JSON), shows the latest status from Claude, and answers permission
