@@ -69,16 +69,26 @@ Badgeware v3 creates the `badge` object; older firmware (MicroPython
 so the app needs v3 or later. `tools/badge_info.py` reports the model
 from the host.
 
-The app starts only on a `"badger"` or `"tufty"`; any other model gets
-an error screen (`MODELS` in `__init__.py`). The model is then checked
-in two places:
+Everything that differs is in one place: a **profile** per badge in
+`apps/claude_buddy/buddy_profile.py` (`BADGER`, `TUFTY`).
+`__init__.py` picks it once from `badge.model`, and any other model
+gets an error screen. Nothing else checks `badge.model`. A profile
+holds:
 
-- `apps/claude_buddy/__init__.py`: `_is_badger()` chooses
-  `badge.mode()` and the first-frame waveform in `_present()`. The
-  Tufty gets `HIRES` and `badge.default_clear = None` (see below).
-- `apps/claude_buddy/buddy_view.py`: `FONTS` and `Theme` choose the
-  fonts and colours. The layout is derived from the screen size and
-  font heights, so the two badges share it.
+- the `badge.mode()` flags, and whether the panel is e-ink (the
+  first-frame waveform in `_present()`);
+- the Badgeware loop quirks: `run_clears_screen` (the Tufty sets
+  `badge.default_clear = None`) and `run_polls_buttons` (see below);
+- the fonts and colours, which `buddy_view.py` uses. The layout is
+  derived from the screen size and font heights, so the badges share
+  it;
+- the backlight levels and idle time (`None` on the Badger);
+- the refresh timings (`Refresh`: settle, status throttle, hold after
+  A/B), **one set for USB power and one for battery**
+  (`profile.refresh(on_usb)`). The painter gets the current set every
+  pass. Both badges use the e-ink timings on both power sources today.
+
+Adding a badge means adding a profile.
 
 **Why `default_clear = None`:** on the Tufty, Badgeware's `run()`
 clears the framebuffer and sends it to the LCD every loop, for apps
@@ -91,22 +101,19 @@ Badger's `run()` does neither.
 `run()` also calls `badge.poll()` every loop. `badge.pressed()` reports
 what changed since the previous poll, so a second poll in `update()`
 wiped out every press: A/B, UP/DOWN and C did nothing. `update()` polls
-only where `run()` doesn't (`_RUN_POLLS` in `__init__.py`).
+only where `run()` doesn't (`run_polls_buttons` in the profile).
 
-The next step, the LCD profile, moves every refresh decision behind a
-display profile:
+The next step, a live LCD refresh for the Tufty, is planned for **USB
+power only**; on battery the Tufty keeps the e-ink timings to save
+power:
 
-- `apps/claude_buddy/buddy_painter.py`: the repaint policy and paging
-  already live here, with `present`, `busy` and the timings passed in.
-  A profile argument will supply the key function (`screen_key` for
-  e-ink, the whole tuple for the LCD) and the timings (no status
-  throttle on the LCD). `__init__.py` picks the profile from
-  `badge.model`.
+- `buddy_profile.py`: the Tufty's `refresh_usb` gets zero timings, and
+  `Refresh` gains the key function (`screen_key` for e-ink, the whole
+  tuple for live) and the label precision.
 - `apps/claude_buddy/buddy_model.py`: stays display-agnostic. The
   battery and token labels take a precision argument (rounded vs
   exact).
-- `apps/claude_buddy/buddy_view.py`: add accents.
-- Tests: run the painter policy tests under both profiles.
+- Tests: run the painter policy tests under both refresh sets.
 
 ## To check on a Tufty
 

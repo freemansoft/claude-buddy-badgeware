@@ -41,7 +41,8 @@ in the invariants reference.
   values (counters, clocks, percentages) ride along by default.
 - **Urgent vs status.** Only things that need the user, or the header
   (connection, USB plug/unplug), are urgent in `is_urgent()`. Anything
-  else is throttled to one repaint every `STATUS_MIN_INTERVAL_MS`.
+  else is throttled to one repaint every `status_interval_ms` (the
+  profile's `Refresh`).
 - **No new periodic hardware work in the loop.** The loop runs every
   `LOOP_SLEEP_MS`. Work there must be a cheap check (a pin read, a
   ticks comparison) or rate-limited, like the battery ADC
@@ -58,20 +59,27 @@ in the invariants reference.
 
 ### Device and display split
 
-The Tufty 2350 runs the app at 320×240 with its own fonts and colours
-(`FONTS` and `Theme` in `buddy_view.py`) but the Badger's refresh
-rules; a live LCD profile in the painter is the next step. The app
-checks `badge.model` in `__init__.py` (`MODELS`, `_is_badger()`) and
-`buddy_view.py`. On the Tufty, Badgeware's `run()` clears and sends
-the screen every loop; `badge.default_clear = None` keeps the last
-paint on screen, so don't remove it. It also polls the buttons every
-loop, so `update()` must not poll again there (`_RUN_POLLS`), or every
-press is lost.
+Every difference between the badges lives in their profiles in
+`buddy_profile.py` (`BADGER`, `TUFTY`): display mode, Badgeware loop
+quirks, fonts, colours, backlight, and refresh timings per power
+source. `__init__.py` picks the profile once from `badge.model`;
+**nothing else may check `badge.model`**. A new difference is a new
+profile field, not an `if` on the model.
+
+The Tufty runs at 320×240 with its own fonts and colours but the
+Badger's refresh timings; a live refresh on USB power (keeping the
+e-ink timings on battery) is the next step. On the Tufty, Badgeware's
+`run()` clears and sends the screen every loop
+(`run_clears_screen`: `badge.default_clear = None` keeps the last
+paint on screen, so don't remove it). It also polls the buttons every
+loop (`run_polls_buttons`: `update()` must not poll again, or every
+press is lost).
 
 - Keep `buddy_model.py` display-agnostic: no `badge.model`, no
   timings that only make sense for e-ink.
-- Put refresh decisions in `buddy_painter.py`, where phase 2 will add a
-  display profile. Don't scatter new `if badger:` checks elsewhere.
+- Put refresh decisions in `buddy_painter.py` and their timings in
+  the profile's `Refresh`. The Badger's must stay the e-ink timings
+  on both power sources (`test_profile.py` checks this).
 - Check layout changes at both sizes: `TuftyViewTest` in
   `tests/test_device_logic.py` reruns the view tests at 320×240. On
   hardware, the Tufty needs a look as well as the Badger.

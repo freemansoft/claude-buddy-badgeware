@@ -55,23 +55,6 @@ FRAME_GAP = 4  # space between the frame and the text
 # Inside the frame the title is centred, with a rule across the frame
 # between it and the instructions, FRAME_GAP each side.
 TITLE_RULE_W = 2  # thickness of that rule
-# Fonts per badge.model, as (bar, title, body); bar is the header and
-# footer. Each is a list of choices, and the first that loads is used:
-# a ROM pixel font by name (one fixed size), or (path, px) for a vector
-# font file drawn at that size.
-#
-# The Badger uses pixel fonts sized for its 264x176 panel. On the Tufty
-# the pixel fonts were too small to read comfortably (its pixels are
-# smaller: about 143 per inch against the Badger's 117), so it uses
-# MonaSans, a vector font that ships with its firmware: 18 px for the
-# header and footer (the largest that still fits them), 24 px titles
-# and 20 px body, sizes picked on the device. The pixel fonts are the
-# fallback if the file isn't there.
-MONA = "/system/assets/fonts/MonaSans-Medium.af"
-FONTS = {
-    "badger": (("nope",), ("absolute",), ("nope",)),
-    "tufty": (((MONA, 18), "smart"), ((MONA, 24), "curse"), ((MONA, 20), "smart")),
-}
 TITLE_MAX_LINES = 2
 LINE_GAP = 2
 HEADER_GAP = 8
@@ -162,7 +145,9 @@ _loaded = {}
 
 
 def _face(choices):
-    """The first of ``choices`` that loads (see FONTS)."""
+    """The first of ``choices`` that loads. Each choice is a ROM pixel
+    font by name (one fixed size), or (path, px) for a vector font file
+    drawn at that size. Fonts per badge are in buddy_profile."""
     for choice in choices:
         if isinstance(choice, str):
             f = getattr(font, choice, None)
@@ -179,38 +164,35 @@ def _face(choices):
     return Face(font.sins, 0, _height(font.sins))
 
 
+def _color(spec):
+    """A ``color`` attribute name ("white") or an (r, g, b) tuple."""
+    return getattr(color, spec) if isinstance(spec, str) else color.rgb(*spec)
+
+
 class Theme:
-    """Colours per badge. ``fg`` is the header, body text, dividers and
-    frame; ``title``, ``footer`` (button labels) and ``meta`` (counts,
-    tokens and page number) set the fixed parts apart from the body.
+    """Colours from the badge's profile (buddy_profile). ``fg`` is the
+    header, body text, dividers and frame; ``title``, ``footer`` (button
+    labels) and ``meta`` (counts, tokens and page number) set the fixed
+    parts apart from the body."""
 
-    The Badger is black on white with no greys (grey text was too faint
-    on e-ink), so every part is black. The Tufty is white on black,
-    Badgeware's own default for it, with coloured titles, button labels
-    and info line."""
-
-    def __init__(self, model):
-        if model == "badger":
-            self.bg = color.white
-            self.fg = color.black
-            self.title = self.footer = self.meta = self.fg
-        else:  # Tufty (colour LCD): white on black
-            self.bg = color.black
-            self.fg = color.white
-            self.title = color.rgb(217, 119, 87)  # Claude orange
-            self.footer = color.rgb(110, 190, 255)  # light blue
-            self.meta = color.rgb(140, 220, 140)  # light green
+    def __init__(self, spec):
+        self.bg = _color(spec["bg"])
+        self.fg = _color(spec["fg"])
+        self.title = _color(spec["title"])
+        self.footer = _color(spec["footer"])
+        self.meta = _color(spec["meta"])
 
 
 class BuddyView:
     """Draws one screen tuple into the framebuffer. It never pushes to
     the panel (that's the painter's job, and the expensive part on
     e-ink). Layout is derived from the screen size and font heights, so
-    both badges share it; only the fonts and colours differ."""
+    both badges share it; only the fonts and colours, from the badge's
+    profile (buddy_profile), differ."""
 
-    def __init__(self):
-        self.theme = Theme(badge.model)
-        bar, title, body = FONTS.get(badge.model, FONTS["badger"])
+    def __init__(self, profile):
+        self.theme = Theme(profile.theme)
+        bar, title, body = profile.fonts
         self.f_bar = _face(bar)
         self.f_title = _face(title)
         self.f_body = _face(body)

@@ -74,6 +74,16 @@ class PainterTest(unittest.TestCase):
         self.assertFalse(self.tick(SETTLE + INTERVAL - 1))
         self.assertTrue(self.tick(SETTLE + INTERVAL))
 
+    def test_set_refresh_changes_the_timings(self):
+        from buddy_profile import Refresh
+
+        self.tick(0)
+        self.tick(SETTLE)
+        # No throttle and no settle: a status change paints at once.
+        self.painter.set_refresh(Refresh(settle_ms=0, status_interval_ms=0, answer_hold_ms=0))
+        self.heartbeat(1000, msg="b")
+        self.assertTrue(self.tick(1000))
+
     def test_prompt_is_not_throttled(self):
         self.tick(0)
         self.tick(SETTLE)

@@ -193,7 +193,7 @@ right of the bottom row:
 
 An earlier version drew status text in dark grey, but that was too hard
 to read on e-ink, so all text is black now. The fonts are set per
-badge in `FONTS` at the top of `apps/claude_buddy/buddy_view.py`. The
+badge in its profile in `apps/claude_buddy/buddy_profile.py`. The
 firmware has 37 built-in pixel fonts to choose from. The Tufty shows
 the same screens, white on black, in MonaSans: a smooth vector font
 that ships with its firmware, at 18 px for the header and footer, 20 px
