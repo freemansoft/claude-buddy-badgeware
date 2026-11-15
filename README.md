@@ -1,4 +1,4 @@
-# Claude Buddy for Badgeware
+# Claude Buddy on Badgeware
 
 A [Claude Desktop Hardware Buddy](https://github.com/anthropics/claude-desktop-buddy)
 for Pimoroni's [Badgeware](https://badgewa.re) badges. It pairs over
