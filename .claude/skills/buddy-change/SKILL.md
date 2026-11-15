@@ -66,9 +66,10 @@ source. `__init__.py` picks the profile once from `badge.model`;
 **nothing else may check `badge.model`**. A new difference is a new
 profile field, not an `if` on the model.
 
-The Tufty runs at 320×240 with its own fonts and colours but the
-Badger's refresh timings; a live refresh on USB power (keeping the
-e-ink timings on battery) is the next step. On the Tufty, Badgeware's
+The Tufty runs at 320×240 with its own fonts and colours. On USB power
+it redraws live (`LIVE_REFRESH`); on battery it keeps the e-ink
+timings, because every redraw costs power. Keep it that way: don't
+make the battery timings live. On the Tufty, Badgeware's
 `run()` clears and sends the screen every loop
 (`run_clears_screen`: `badge.default_clear = None` keeps the last
 paint on screen, so don't remove it). It also polls the buttons every

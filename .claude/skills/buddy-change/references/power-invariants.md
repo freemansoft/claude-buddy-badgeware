@@ -59,6 +59,15 @@ breaks at that rate.
 | Only level changes reach the hardware                                 | `tick()` runs 50 times a second                            | `Backlight._apply`                           | `test_only_changes_reach_the_hardware`                                                |
 | Back to bright on exit                                                | The menu mustn't be left dim                               | `on_exit()`; `Backlight.restore`             | `test_restore_on_exit`                                                                |
 
+## Refresh per power source
+
+| Rule                                                                | Why                                                              | Where                                          | Protected by                                            |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| The Badger uses the e-ink timings on USB and battery                | Every e-ink refresh flashes and costs power, whatever the supply | `buddy_profile.BADGER`                         | `test_badger_uses_the_eink_rules_on_both_power_sources` |
+| The Tufty is live only on USB; on battery it uses the e-ink timings | Every redraw costs power on battery; on USB it's free            | `buddy_profile.TUFTY`                          | `test_tufty_is_live_on_usb_and_eink_on_battery`         |
+| Live still skips identical screens                                  | Heartbeats arrive every ~100 ms, almost all identical            | `Painter.tick` (`state == shown_state`)        | `test_identical_heartbeats_still_paint_nothing`         |
+| Unplugging switches back to the e-ink timings at once               | `on_usb` is in the key and urgent                                | `__init__.py` `painter.set_refresh` every pass | `test_unplugged_passengers_ride_along_again`            |
+
 ## Planned (don't break the path to these)
 
 From the README roadmap and `docs/power.md`: a longer advertising

@@ -19,9 +19,9 @@ id, or which reply) changes. A routine status update leaves the reader
 where they are, clamped if the content got shorter.
 
 The timings come from the badge's profile (buddy_profile.Refresh), per
-power source: the app calls set_refresh() every pass. A live LCD
-profile (no throttle, a key that includes the passengers) is planned
-for the Tufty on USB power.
+power source: the app calls set_refresh() every pass. A live Refresh
+(the Tufty on USB power) has no settle, throttle or hold, and compares
+the whole screen tuple, so the battery and token labels repaint too.
 """
 
 from buddy_model import S_ACTIONABLE, S_DOC, is_urgent, screen_key
@@ -53,6 +53,8 @@ class Painter:
         self._busy = busy
         self.settle_ms = settle_ms
         self.status_interval_ms = status_interval_ms
+        # Live: compare the whole screen tuple, passengers included.
+        self.live = False
 
         self.page = 0
         self.doc = None
@@ -67,9 +69,10 @@ class Painter:
     def set_refresh(self, refresh):
         """Use ``refresh``'s timings (a buddy_profile.Refresh) from now
         on. The app calls this every pass with the timings for the
-        current power source; it is two attribute writes."""
+        current power source; it is three attribute writes."""
         self.settle_ms = refresh.settle_ms
         self.status_interval_ms = refresh.status_interval_ms
+        self.live = refresh.live
 
     def hold(self, now, ms):
         """Paint nothing for ``ms``. Used after A/B (the profile's
@@ -108,7 +111,7 @@ class Painter:
         self._sync_doc(scr)
         self.page = max(0, min(self.page, self.view.page_count(scr) - 1))
 
-        state = (screen_key(scr), self.page)
+        state = (scr if self.live else screen_key(scr), self.page)
         if state == self.shown_state:
             self.first_diff_ms = None
             return False

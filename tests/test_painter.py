@@ -158,6 +158,59 @@ class PainterTest(unittest.TestCase):
         self.assertEqual(self.presented, 1)
 
 
+class LivePainterTest(unittest.TestCase):
+    """The Tufty on USB power: every change paints at once, passengers
+    included. Uses PainterTest's set-up and helpers."""
+
+    setUp_eink = PainterTest.setUp
+    present = PainterTest.present
+    tick = PainterTest.tick
+    heartbeat = PainterTest.heartbeat
+
+    def setUp(self):
+        from buddy_profile import LIVE_REFRESH
+
+        self.setUp_eink()
+        self.model.set_battery(80, usb=True)
+        self.painter.set_refresh(LIVE_REFRESH)
+
+    def test_first_paint_is_immediate(self):
+        self.assertTrue(self.tick(0))
+
+    def test_status_change_paints_at_once(self):
+        self.tick(0)
+        self.heartbeat(1000, msg="b")
+        self.assertTrue(self.tick(1000))
+
+    def test_tokens_paint_at_once(self):
+        self.tick(0)
+        self.heartbeat(1000, tokens_today=12345)
+        self.assertTrue(self.tick(1000))
+
+    def test_identical_heartbeats_still_paint_nothing(self):
+        self.tick(0)
+        for t in range(100, 10000, 100):  # Desktop's ~100 ms heartbeats
+            self.heartbeat(t)
+            self.assertFalse(self.tick(t), t)
+        self.assertEqual(self.presented, 1)
+
+    def test_unplugged_passengers_ride_along_again(self):
+        from buddy_profile import EINK_REFRESH
+
+        self.tick(0)
+        # Unplugging is urgent: one repaint after the e-ink settle delay.
+        self.model.set_battery(80, usb=False)
+        self.painter.set_refresh(EINK_REFRESH)
+        self.tick(1000)
+        self.assertTrue(self.tick(1000 + SETTLE))
+        presented = self.presented
+        # Now tokens ride along, as on the Badger.
+        self.heartbeat(2000, tokens_today=999)
+        for t in (2000, 2000 + SETTLE, 2000 + INTERVAL + SETTLE):
+            self.assertFalse(self.tick(t), t)
+        self.assertEqual(self.presented, presented)
+
+
 class PagingPolicyTest(unittest.TestCase):
     def setUp(self):
         self.view = FakeView(pages=3)

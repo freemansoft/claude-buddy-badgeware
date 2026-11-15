@@ -170,6 +170,18 @@ def _one_line(text):
     return " ".join(text.split())
 
 
+def exact_tokens(n):
+    """31,204: every digit, grouped in thousands. (MicroPython's format
+    has no "," option.)"""
+    digits = str(int(n))
+    groups = []
+    while len(digits) > 3:
+        groups.insert(0, digits[-3:])
+        digits = digits[:-3]
+    groups.insert(0, digits)
+    return ",".join(groups)
+
+
 def format_tokens(n):
     """850, 1.2k, 31k, 1.2M, 12M."""
     if n < 1000:
@@ -268,6 +280,14 @@ class BuddyModel:
         # When total last became 0 (ms), or None while sessions are open.
         self._no_sessions_since = None
 
+        # Presentation options the app sets from the badge's refresh
+        # timings (buddy_profile.Refresh) for the current power source.
+        # The model doesn't know which badge it runs on.
+        # How long total == 0 must last before the "No sessions" screen.
+        self.no_sessions_delay_ms = NO_SESSIONS_DELAY_MS
+        # Today's tokens in full ("31,204") rather than rounded ("31k").
+        self.exact_tokens = False
+
         # Badge battery, set by the app via set_battery().
         self.battery_pct = None
         self.on_usb = False
@@ -336,11 +356,12 @@ class BuddyModel:
         return self._silence_ms(now_ms) > HEARTBEAT_TIMEOUT_MS
 
     def no_sessions(self, now_ms):
-        """Desktop has reported total == 0 for NO_SESSIONS_DELAY_MS."""
+        """Desktop has reported total == 0 for no_sessions_delay_ms
+        (NO_SESSIONS_DELAY_MS unless the app changes it)."""
         if self._no_sessions_since is None or self.total > 0:
             return False
         since = ticks_diff(now_ms, self._no_sessions_since)
-        return since < 0 or since >= NO_SESSIONS_DELAY_MS  # < 0: ticks wrapped
+        return since < 0 or since >= self.no_sessions_delay_ms  # < 0: ticks wrapped
 
     def is_dead(self, now_ms):
         """No heartbeat for DEAD_LINK_MS: time to drop the link."""
@@ -647,11 +668,13 @@ class BuddyModel:
 
     def tokens_label(self):
         """``31k today`` from the heartbeat's tokens_today, for the bottom
-        row. A passenger: it climbs during every reply, and redrawing
-        the e-ink for each change would flash constantly."""
+        row, or ``31,204 today`` with exact_tokens. A passenger: it
+        climbs during every reply, and redrawing the e-ink for each
+        change would flash constantly."""
         if self.tokens_today is None:
             return ""
-        return format_tokens(self.tokens_today) + " today"
+        fmt = exact_tokens if self.exact_tokens else format_tokens
+        return fmt(self.tokens_today) + " today"
 
     # -- presentation ---------------------------------------------------
 
@@ -699,7 +722,7 @@ class BuddyModel:
         3. waiting without a prompt: Desktop's summary, answered in the
            app (Desktop sends no prompt for long commands or questions);
         4. no heartbeat yet since connecting;
-        5. no sessions open for NO_SESSIONS_DELAY_MS;
+        5. no sessions open for no_sessions_delay_ms;
         6. status: summary, Claude's reply, entries, counts.
 
         Called every loop, so it only assembles tuples from state that
