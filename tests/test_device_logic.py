@@ -26,17 +26,24 @@ class FakeScreen:
         self.font = None
         self.pen = None
 
-    @staticmethod
-    def _check_escaped(text):
-        # Badgeware reads a lone "[" as the start of a glyph tag; the
-        # view must escape it as "[[" before measuring or drawing.
-        if "[" in text.replace("[[", ""):
+    # True: firmware where "[" starts a glyph tag and "[[" is one literal
+    # "[". False: firmware that draws brackets as they are (Badgeware
+    # v3.1.1, as seen on a Tufty).
+    markup = True
+
+    def _check_escaped(self, text):
+        # With markup, a lone "[" starts a glyph tag; the view must
+        # escape it as "[[" before measuring or drawing.
+        if self.markup and "[" in text.replace("[[", ""):
             raise AssertionError("unescaped markup: {!r}".format(text))
 
     def measure_text(self, text):
+        if text in ("[", "[["):  # the view's markup probe
+            return ((1 if self.markup else len(text)) * CHAR_W, 12)
         self._check_escaped(text)
-        # "[[" is one literal "[" once markup is parsed.
-        return (len(text.replace("[[", "[")) * CHAR_W, 12)
+        # With markup, "[[" is one literal "[".
+        shown = text.replace("[[", "[") if self.markup else text
+        return (len(shown) * CHAR_W, 12)
 
     def text(self, text, x, y):
         self._check_escaped(text)
@@ -172,6 +179,15 @@ class WrapTest(unittest.TestCase):
 
     def test_escape(self):
         self.assertEqual(buddy_view.escape("[pen:1,2,3]x"), "[[pen:1,2,3]x")
+
+    def test_no_escaping_where_firmware_has_no_markup(self):
+        FakeScreen.markup = False
+        self.addCleanup(setattr, FakeScreen, "markup", True)
+        view = buddy_view.BuddyView()
+        view.draw(make_scr(kind="status", lines=(("w", "[pen:1,2,3]x [ -f a ]"),)))
+        texts = [t for t, _, _ in screen.drawn]
+        self.assertTrue(any("[pen:1,2,3]x" in t for t in texts))
+        self.assertFalse(any("[[" in t for t in texts))
 
     def test_draw_escapes_markup(self):
         scr = make_scr(kind="prompt", title="Allow Bash?",

@@ -122,6 +122,20 @@ def escape(text):
     return text.replace("[", "[[")
 
 
+def _markup_active():
+    """True if text() parses "[" as glyph markup, so "[[" draws one "[".
+
+    picovector documents this markup, but on Badgeware v3.1.1
+    (picovector v3.1.0) "[[" measures and draws as two brackets, even
+    with a glyph registered. Escaping there would show every "[" from
+    Claude doubled, so the view only escapes when "[[" really is one
+    bracket wide. Uses the current screen.font."""
+    try:
+        return screen.measure_text("[[")[0] == screen.measure_text("[")[0]
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def _font(name):
     f = getattr(font, name, None)
     return f if f is not None else font.sins
@@ -160,6 +174,8 @@ class BuddyView:
         self.h_bar = _height(self.f_bar)
         self.h_title = _height(self.f_title)
         self.h_body = _height(self.f_body)
+        screen.font = self.f_body
+        self._markup = _markup_active()
 
         self.w = screen.width
         self.h = screen.height
@@ -186,8 +202,11 @@ class BuddyView:
 
     # -- text helpers -----------------------------------------------------
 
+    def _esc(self, text):
+        return escape(text) if self._markup else text
+
     def _width(self, text):
-        return int(screen.measure_text(escape(text))[0])
+        return int(screen.measure_text(self._esc(text))[0])
 
     def _split_long(self, word, width):
         """Hard-break one word wider than ``width`` into pieces."""
@@ -240,7 +259,7 @@ class BuddyView:
         return lines
 
     def _text(self, text, x, y):
-        screen.text(escape(text), int(x), int(y))
+        screen.text(self._esc(text), int(x), int(y))
 
     # -- drawing ----------------------------------------------------------
 

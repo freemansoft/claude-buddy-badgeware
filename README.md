@@ -604,8 +604,10 @@ the current firmware builds with.
 
 - [api/image.py](https://github.com/pimoroni/picovector-micropython/blob/v3.1.0/api/image.py):
   - `text()` and `measure_text()`;
-  - inline `[name]` markup, where `[[` is a literal `[`, hence the
-    escaping in `buddy_view.py`.
+  - inline `[name]` markup, where `[[` is documented as a literal `[`.
+    On Badgeware v3.1.1, though, `[[` draws as two brackets, so
+    `buddy_view.py` checks at start-up and escapes only if `[[` really
+    is one bracket wide.
 - [api/color.py](https://github.com/pimoroni/picovector-micropython/blob/v3.1.0/api/color.py):
   the Badger e-ink greys `dark_grey` (0x40) and `light_grey` (0xC0).
 
