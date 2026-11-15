@@ -37,19 +37,32 @@ def _windows_label(drive):
     return buf.value if ok else ""
 
 
+def _ignore_missing(func, path, exc_info):
+    """rmtree error handler. On macOS the badge's FAT drive holds "._"
+    companion files that vanish along with their main file, so
+    deleting one that's already gone isn't an error."""
+    if not issubclass(exc_info[0], FileNotFoundError):
+        raise exc_info[1]
+
+
 def find_badge():
     candidates = []
-    if sys.platform == "darwin":
-        candidates = [Path("/Volumes") / label for label in LABELS]
-    elif os.name == "nt":
+    if os.name == "nt":
         for letter in string.ascii_uppercase[3:]:
             drive = "{}:\\".format(letter)
             if os.path.exists(drive) and _windows_label(drive).upper() in LABELS:
                 candidates.append(Path(drive))
     else:
-        user = os.environ.get("USER", "")
-        for base in (Path("/media") / user, Path("/run/media") / user, Path("/mnt")):
-            candidates += [base / label for label in LABELS]
+        # Labels vary in case and form (TUFTY, Tufty2350), and
+        # Linux paths are case-sensitive, so compare names upper-cased.
+        if sys.platform == "darwin":
+            bases = [Path("/Volumes")]
+        else:
+            user = os.environ.get("USER", "")
+            bases = [Path("/media") / user, Path("/run/media") / user, Path("/mnt")]
+        for base in bases:
+            if base.is_dir():
+                candidates += [c for c in base.iterdir() if c.name.upper() in LABELS]
     return [c for c in candidates if c.is_dir() and _looks_like_badge(c)]
 
 
@@ -72,8 +85,8 @@ def main():
 
     target = root / "apps" / APP
     if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(SRC, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
+        shutil.rmtree(target, onerror=_ignore_missing)
+    shutil.copytree(SRC, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "._*"))
     print("Installed to", target)
     print("Eject the drive; the badge restarts into the menu.")
 

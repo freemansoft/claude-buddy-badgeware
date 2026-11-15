@@ -251,6 +251,37 @@ You need a Badger 2350 running Badgeware firmware with Bluetooth. The
 current [pimoroni/badger2350](https://github.com/pimoroni/badger2350)
 releases build MicroPython with `bluetooth` (BTstack) and `aioble`.
 
+### Check and update the firmware
+
+A new badge may come with firmware that is months old. Check it first
+(needs `pip install mpremote`), with the badge on USB showing its menu:
+
+```bash
+python3 tools/badge_info.py
+```
+
+It reports the model (from `badge.model`: `badger` or `tufty`), the
+MicroPython build and its date, whether Bluetooth and `aioble` are
+there, and whether the firmware looks as new as Pimoroni's latest
+release. The firmware doesn't record its release number, so this
+compares build dates. It stops whatever the badge was running; press
+RESET afterwards.
+
+To update, hold **BOOT**, tap **RESET** and let go of BOOT: a drive
+named `RP2350` appears. Then run one of:
+
+```bash
+python3 tools/flash_firmware.py --model tufty --firmware-only     # keeps your apps
+python3 tools/flash_firmware.py --model tufty --with-filesystem   # resets all apps
+```
+
+`--with-filesystem` replaces every app and file with Pimoroni's
+defaults, including Claude Buddy and possibly its saved settings; it
+asks before flashing. It suits a new badge. Claude Code's
+`badge-bootstrap` skill walks through the whole sequence.
+
+### Copy the app
+
 1. **Double-tap RESET** on the back of the badge. It mounts as a USB
    drive named `BADGER`.
 2. Copy the app onto the drive, using either:
@@ -327,6 +358,8 @@ docs/power.md             power management: USB power vs battery
 docs/devices.md           Badger (e-ink) vs Tufty (LCD) display differences
 tests/                    host-side unit tests (CPython)
 tools/install.py          copy the app to the badge's USB drive
+tools/badge_info.py       which badge is on USB, and is its firmware current
+tools/flash_firmware.py   download and flash Pimoroni's latest firmware
 tools/make_icon.py        regenerate icon.png (no dependencies)
 ```
 

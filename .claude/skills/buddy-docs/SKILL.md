@@ -63,6 +63,7 @@ so the two can't drift apart.
 | Topic                                                       | Home                                                         |
 | ----------------------------------------------------------- | ------------------------------------------------------------ |
 | What the badge does, install, buttons, screens, roadmap     | `README.md`                                                  |
+| Checking and flashing badge firmware                        | `README.md` "Install"; `badge-bootstrap` skill               |
 | Wire protocol, what's implemented, deviations from the spec | `docs/protocol.md`                                           |
 | Decisions not to use parts of the spec                      | `docs/protocol.md` "Decisions"; README roadmap "Not planned" |
 | Power: consumers, USB power vs battery, power constants     | `docs/power.md`                                              |
