@@ -36,24 +36,24 @@ The Badger's rules all exist to avoid e-ink refreshes. On an LCD they
 only make the screen lag, so the Tufty will get its own **display
 profile** instead of reusing them.
 
-| Setting                 | Badger 2350 (e-ink profile, today)                                       | Tufty 2350 (today; the LCD profile is the plan)                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `badge.mode()`          | `FAST_UPDATE \| NON_BLOCKING`                                            | `HIRES`                                                                                                                                         |
-| What triggers a repaint | The screen key changes (`screen_key`: battery and tokens excluded)       | Same as the Badger. LCD profile _Not implemented_ (plan: **any** change)                                                                        |
-| Urgent settle delay     | 300 ms                                                                   | 300 ms, same as the Badger (plan: none)                                                                                                         |
-| Status-only changes     | Coalesced, at most one repaint every 15 s                                | Same 15 s throttle (plan: immediate)                                                                                                            |
-| After A/B               | ~1 s hold, so the result and Desktop's follow-up share one refresh       | Same ~1 s hold (plan: no hold)                                                                                                                  |
-| "No sessions" screen    | After 5 s with no sessions, so a quick close-and-open costs no refreshes | Same 5 s (plan: could be immediate)                                                                                                             |
-| First frame             | Slowest, cleanest waveform, to clear ghosting from the menu              | Not needed                                                                                                                                      |
-| Button reading          | `update()` calls `badge.poll()` each pass                                | Badgeware's `run()` calls `badge.poll()` each loop; `update()` uses that reading and doesn't poll                                               |
-| Present                 | `display.update()`, non-blocking; painter waits while `display.busy()`   | `display.update()` on each paint; `run()` re-sends the framebuffer every loop, so `badge.default_clear = None` stops it clearing between paints |
-| Battery label           | 25% steps (5% when low), rides along with other repaints                 | Same as the Badger (plan: exact %, live)                                                                                                        |
-| Tokens label            | Rounded (`31k`), rides along                                             | Same as the Badger (plan: live, e.g. `31,204`)                                                                                                  |
-| Colours                 | Black on white; no grey text (too faint on e-ink)                        | White on black (Badgeware's Tufty default)                                                                                                      |
-| Accents                 | None                                                                     | Not implemented (plan: e.g. a coloured title when the `emphasis` flag is set)                                                                   |
-| Fonts                   | `nope` pixel font, sized for 264×176                                     | `smart` 16 px, `curse` 20 px titles: about the Badger's size to the eye                                                                         |
-| Animation               | None: nothing on screen moves                                            | Not implemented (open question: a "working" indicator?)                                                                                         |
-| Instant feedback        | Case-light blink on A/B, because the panel takes 1–2 s                   | Not implemented (the screen itself may be fast enough)                                                                                          |
+| Setting                 | Badger 2350 (e-ink profile, today)                                       | Tufty 2350 (today; the LCD profile is the plan)                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `badge.mode()`          | `FAST_UPDATE \| NON_BLOCKING`                                            | `HIRES`                                                                                                                                          |
+| What triggers a repaint | The screen key changes (`screen_key`: battery and tokens excluded)       | Same as the Badger. LCD profile _Not implemented_ (plan: **any** change)                                                                         |
+| Urgent settle delay     | 300 ms                                                                   | 300 ms, same as the Badger (plan: none)                                                                                                          |
+| Status-only changes     | Coalesced, at most one repaint every 15 s                                | Same 15 s throttle (plan: immediate)                                                                                                             |
+| After A/B               | ~1 s hold, so the result and Desktop's follow-up share one refresh       | Same ~1 s hold (plan: no hold)                                                                                                                   |
+| "No sessions" screen    | After 5 s with no sessions, so a quick close-and-open costs no refreshes | Same 5 s (plan: could be immediate)                                                                                                              |
+| First frame             | Slowest, cleanest waveform, to clear ghosting from the menu              | Not needed                                                                                                                                       |
+| Button reading          | `update()` calls `badge.poll()` each pass                                | Badgeware's `run()` calls `badge.poll()` each loop; `update()` uses that reading and doesn't poll                                                |
+| Present                 | `display.update()`, non-blocking; painter waits while `display.busy()`   | `display.update()` on each paint; `run()` re-sends the framebuffer every loop, so `badge.default_clear = None` stops it clearing between paints  |
+| Battery label           | 25% steps (5% when low), rides along with other repaints                 | Same as the Badger (plan: exact %, live)                                                                                                         |
+| Tokens label            | Rounded (`31k`), rides along                                             | Same as the Badger (plan: live, e.g. `31,204`)                                                                                                   |
+| Colours                 | Black on white; no grey text (too faint on e-ink)                        | White on black (Badgeware's Tufty default) for the header and body; titles orange, button labels light blue, counts/tokens/page line light green |
+| Accents                 | None                                                                     | Not implemented (plan: e.g. highlight the title when the `emphasis` flag is set)                                                                 |
+| Fonts                   | `nope` pixel font, sized for 264×176                                     | MonaSans (vector, from the firmware): 18 px header and footer, 20 px body, 24 px titles; pixel fonts as fallback                                 |
+| Animation               | None: nothing on screen moves                                            | Not implemented (open question: a "working" indicator?)                                                                                          |
+| Instant feedback        | Case-light blink on A/B, because the panel takes 1–2 s                   | Not implemented (the screen itself may be fast enough)                                                                                           |
 
 Things that are the **same on both**: the protocol, the BLE link, the
 buttons, the case lights, the battery and USB handling in the model,
@@ -118,7 +118,11 @@ and `aioble`, and `badge.model` is `"tufty"` (14 November 2026).
 On the device (14 November 2026): the app runs at 320×240, the
 pairing screen stays up, it connects to Claude Desktop, and a prompt
 offered on the badge is answered with A and B. Fonts were compared on
-the panel: `smart` read more easily than the wider `absolute`.
+the panel: the pixel fonts (`smart` 16 px) needed fine vision, so the
+Tufty uses MonaSans at sizes picked on the device. The Badger keeps its
+pixel fonts for now: MonaSans is drawn with smoothed (grey) edges, and
+grey was already too faint on its 4-grey e-ink. MonaSans with
+antialiasing off is untried there.
 
 - Paging with UP/DOWN and exiting with C: same fix as A/B, not yet
   tried separately.
