@@ -37,6 +37,12 @@ without this repo knowing. So the first step is always to read the
    (`handle_line` and everything it calls, the status ack, the
    permission message).
 
+**Before blaming the protocol code** for a connection that never gets
+a heartbeat (stuck on "Waiting for the first update from Claude"),
+rule out the computer's Bluetooth state with the reset in the
+README's [Troubleshooting](../../../README.md#troubleshooting). It has
+caused this before with code that was fine.
+
 ## Checking conformance
 
 Compare the spec section by section against both the code and
