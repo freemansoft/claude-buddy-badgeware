@@ -43,7 +43,7 @@ timings, because every redraw costs power. Both come from its profile
 | `badge.mode()`          | `FAST_UPDATE \| NON_BLOCKING`                                            | `HIRES`                                                                                                                                         |
 | What triggers a repaint | The screen key changes (`screen_key`: battery and tokens excluded)       | On USB: **any** change, battery and tokens included. On battery: same as the Badger                                                             |
 | Urgent settle delay     | 300 ms                                                                   | On USB: none. On battery: 300 ms                                                                                                                |
-| Status-only changes     | Coalesced, at most one repaint every 15 s                                | On USB: at once. On battery: at most every 15 s, as on the Badger                                                                               |
+| Status-only changes     | Coalesced, at most one repaint every 5 s on USB, every 10 s on battery   | On USB: at once. On battery: at most every 10 s, as on the Badger                                                                               |
 | After A/B               | ~1 s hold, so the result and Desktop's follow-up share one refresh       | On USB: no hold. On battery: ~1 s hold                                                                                                          |
 | "No sessions" screen    | After 5 s with no sessions, so a quick close-and-open costs no refreshes | On USB: at once. On battery: after 5 s                                                                                                          |
 | First frame             | Slowest, cleanest waveform, to clear ghosting from the menu              | Not needed                                                                                                                                      |
@@ -111,9 +111,10 @@ holds:
 - the refresh timings (`Refresh`: settle, status throttle, hold after
   A/B), **one set for USB power and one for battery**
   (`profile.refresh(on_usb)`). The painter gets the current set every
-  pass. The Badger uses the e-ink timings on both power sources; the
-  Tufty redraws live on USB power and uses the e-ink timings on
-  battery.
+  pass. The Badger uses the e-ink timings on both power sources, with
+  a shorter status throttle on USB power (5 s, against 10 s on
+  battery); the Tufty redraws live on USB power and uses the e-ink
+  timings on battery.
 
 Adding a badge means adding a profile.
 

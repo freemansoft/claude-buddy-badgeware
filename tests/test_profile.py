@@ -39,12 +39,15 @@ class ProfileTest(unittest.TestCase):
         self.assertIs(profile.refresh(False), battery)
 
     def test_badger_uses_the_eink_rules_on_both_power_sources(self):
-        # Every e-ink refresh is a 1-2 s flash: never relax these.
+        # Every e-ink refresh is a 1-2 s flash: never live. Status
+        # updates are throttled to 5 s on USB and 10 s on battery.
         b = bp.BADGER
-        for refresh in (b.refresh(True), b.refresh(False)):
+        self.assertIs(b.refresh(True), bp.EINK_USB_REFRESH)
+        self.assertIs(b.refresh(False), bp.EINK_REFRESH)
+        for refresh, interval in ((b.refresh(True), 5000), (b.refresh(False), 10000)):
             self.assertEqual((refresh.settle_ms, refresh.status_interval_ms,
                               refresh.answer_hold_ms, refresh.no_sessions_delay_ms),
-                             (300, 15000, 1000, 5000))
+                             (300, interval, 1000, 5000))
             self.assertFalse(refresh.live)
         self.assertTrue(b.eink)
         self.assertEqual(b.mode(), FAST_UPDATE | NON_BLOCKING)

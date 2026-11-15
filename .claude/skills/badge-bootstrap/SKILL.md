@@ -119,8 +119,16 @@ Tell the user to **double-tap RESET**; the badge mounts as a drive
 python3 tools/install.py
 ```
 
-and eject the drive. The badge restarts into the menu, which lists
-Claude Buddy. `badge_info.py` should now say `installed`.
+On macOS and Linux it ejects the drive itself; on Windows (or with
+`--no-eject`) ask the user to eject it. The badge restarts into the
+menu, which lists Claude Buddy. `badge_info.py` should now say
+`installed`.
+
+Never reset the badge (RESET, `mpremote`, unplugging) while the drive
+is still mounted: writes still in the computer's cache are lost, and
+the app later fails with a `SyntaxError` in a truncated file. If
+`install.py` says it couldn't eject, have the user eject before
+anything else.
 
 Both badges are supported. The Tufty's MonaSans font comes from the
 firmware's own filesystem (`/system/assets/fonts`); after a
@@ -132,8 +140,9 @@ font is there, or the app falls back to the smaller pixel fonts (see
 normal mode, `mpremote connect <port> exec "import _msc"` switches it
 to USB-drive mode (the same thing a double-tap of RESET does). The
 mpremote call hangs or fails as the serial port goes away; that's
-expected. Install, eject, then ask the user to press RESET once:
-ejecting doesn't restart a badge put into drive mode this way.
+expected. Run `install.py` (which ejects on macOS and Linux), then ask
+the user to press RESET once: ejecting doesn't restart a badge put
+into drive mode this way.
 
 ### 5. Record what changed
 

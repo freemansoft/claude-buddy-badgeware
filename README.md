@@ -1,4 +1,4 @@
-# Claude Buddy for Badgeware
+# Claude Buddy on Badgeware
 
 A [Claude Desktop Hardware Buddy](https://github.com/anthropics/claude-desktop-buddy)
 for Pimoroni's [Badgeware](https://badgewa.re) badges. It pairs over
@@ -240,7 +240,8 @@ short:
 - **Few e-ink refreshes.** Every Badger refresh is a full-screen flash
   of about 1–2 s, so the panel only refreshes when something you can
   see changes. A new prompt shows after about 0.3 s. Status-only
-  changes (summary, transcript, counts) show at most every 15 s.
+  changes (summary, transcript, counts) show at most every 5 s on
+  USB power and every 10 s on battery.
   Battery and tokens update along with other refreshes, so they can
   be a little out of date.
 - **No sleep while the app is open.** Sleeping would turn the radio
@@ -297,10 +298,15 @@ asks before flashing. It suits a new badge. Claude Code's
    drive named `BADGER`.
 2. Copy the app onto the drive, using either:
    - `python3 tools/install.py`, which finds the drive on macOS,
-     Windows or Linux (pass `--dest` to choose it), or
+     Windows or Linux (pass `--dest` to choose it), copies the app,
+     and on macOS and Linux ejects the drive for you, or
    - by hand: copy `apps/claude_buddy/` into the drive's `apps/` folder.
-3. Eject the drive. The badge restarts into the menu, which now shows
-   **Claude Buddy**.
+3. Eject the drive, unless the script already did. The badge restarts
+   into the menu, which now shows **Claude Buddy**.
+
+Always eject before pressing RESET or unplugging the badge. The
+computer finishes writing to the drive in the background, and a
+restart before then leaves files cut short on the badge.
 
 ## Connect to Claude Desktop
 
@@ -362,6 +368,12 @@ They haven't yet been checked against this badge on both platforms.
   reconnects by itself after the computer sleeps. If it doesn't,
   click **Connect** in the Hardware Buddy window; if that doesn't
   work either, try the reset above.
+- **`SyntaxError` when the app starts, on one badge only:** the app's
+  files on that badge are probably cut short. This was seen on a
+  Badger whose `__init__.py` stopped partway through, at 4096 bytes,
+  after earlier installs where the badge restarted before the drive
+  was ejected. Reinstall with `python3 tools/install.py` and let it
+  eject the drive (or eject it yourself) before touching RESET.
 - **Does the badge sleep while it watches Claude?** No, on USB power
   or battery. Badgeware has no idle timer of its own; a badge only
   sleeps when an app asks it to, and Claude Buddy never does (see
@@ -416,8 +428,9 @@ tools/make_icon.py        regenerate icon.png (no dependencies)
 1. Make the code changes, and run the host tests (below).
 2. Put the badge in disk mode: **double-tap RESET** on the back. It
    mounts as a USB drive named `BADGER`.
-3. Copy the app across: `python3 tools/install.py`.
-4. Eject the drive.
+3. Copy the app across: `python3 tools/install.py`. On macOS and
+   Linux it also ejects the drive.
+4. Eject the drive if the script didn't (Windows, or `--no-eject`).
 5. If the badge doesn't restart into the menu by itself, press RESET
    once.
 6. Run the app from the Badgeware menu: select the **Claude Buddy**
@@ -548,8 +561,9 @@ The Tufty's colour LCD redraws instantly without flashing, so on USB
 power it redraws **live**: Claude's status, the counts and today's
 tokens (in full, e.g. `31,204 today`) show as soon as they change. On
 battery it keeps the Badger's e-ink timings (status at most every
-15 s, tokens rounded), because every redraw costs power. The Badger
-uses the e-ink timings on both.
+10 s, tokens rounded), because every redraw costs power. The Badger
+uses the e-ink timings on both, with status at most every 5 s on USB
+power.
 
 The full comparison of the two displays, where the code switches, and
 what to check on a Tufty are in [docs/devices.md](docs/devices.md).

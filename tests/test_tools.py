@@ -1,5 +1,5 @@
 """Host tests for the bootstrap tools (tools/badgeware_release.py,
-tools/badge_info.py). No badge or network needed."""
+tools/badge_info.py, tools/install.py). No badge or network needed."""
 
 import sys
 import unittest
@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 import badge_info  # noqa: E402
 import badgeware_release as rel  # noqa: E402
+import install  # noqa: E402
 
 # Real `mpremote devs` output with a Tufty and two other serial devices.
 DEVS = """\
@@ -95,6 +96,62 @@ class ParseInfoTest(unittest.TestCase):
     def test_missing_line_is_an_error(self):
         with self.assertRaises(ValueError):
             badge_info.parse_info("Traceback ...")
+
+
+class FakeRun:
+    """Stands in for subprocess.run: records each command and answers
+    from ``results`` ({command name: (returncode, stdout)}); a missing
+    name raises OSError, as for a command that isn't installed."""
+
+    def __init__(self, results):
+        self.results = results
+        self.calls = []
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append(cmd)
+        key = " ".join(cmd[:2]) if cmd[0] == "udisksctl" else cmd[0]
+        if key not in self.results:
+            raise FileNotFoundError(cmd[0])
+        code, out = self.results[key]
+        return type("Result", (), {"returncode": code, "stdout": out, "stderr": ""})()
+
+
+class EjectTest(unittest.TestCase):
+    def test_macos_uses_diskutil(self):
+        run = FakeRun({"diskutil": (0, "")})
+        self.assertTrue(install.eject(Path("/Volumes/BADGER"), run, "darwin"))
+        self.assertEqual(run.calls, [["diskutil", "eject", "/Volumes/BADGER"]])
+
+    def test_macos_failure_reported(self):
+        run = FakeRun({"diskutil": (1, "")})
+        self.assertFalse(install.eject(Path("/Volumes/BADGER"), run, "darwin"))
+
+    def test_linux_unmounts_then_powers_off_the_mounted_device(self):
+        run = FakeRun({
+            "findmnt": (0, "/dev/sdb1\n"),
+            "udisksctl unmount": (0, ""),
+            "udisksctl power-off": (0, ""),
+        })
+        self.assertTrue(install.eject(Path("/media/me/BADGER"), run, "linux"))
+        self.assertEqual(run.calls, [
+            ["findmnt", "-no", "SOURCE", "/media/me/BADGER"],
+            ["udisksctl", "unmount", "-b", "/dev/sdb1"],
+            ["udisksctl", "power-off", "-b", "/dev/sdb1"],
+        ])
+
+    def test_linux_without_udisksctl(self):
+        run = FakeRun({"findmnt": (0, "/dev/sdb1\n")})
+        self.assertFalse(install.eject(Path("/media/me/BADGER"), run, "linux"))
+
+    def test_linux_stops_if_unmount_fails(self):
+        run = FakeRun({"findmnt": (0, "/dev/sdb1\n"), "udisksctl unmount": (1, ""), "udisksctl power-off": (0, "")})
+        self.assertFalse(install.eject(Path("/media/me/BADGER"), run, "linux"))
+        self.assertNotIn("power-off", [c[1] for c in run.calls if c[0] == "udisksctl"])
+
+    def test_other_platforms_dont_eject(self):
+        run = FakeRun({})
+        self.assertFalse(install.eject(Path("E:\\"), run, "win32"))
+        self.assertEqual(run.calls, [])
 
 
 if __name__ == "__main__":
