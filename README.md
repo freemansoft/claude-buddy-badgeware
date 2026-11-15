@@ -336,6 +336,41 @@ reconnect.
 These notes come from the protocol reference and general BLE behaviour.
 They haven't yet been checked against this badge on both platforms.
 
+### Troubleshooting
+
+- **Stuck on `Connected` / "Waiting for the first update from
+  Claude":** the badge has a Bluetooth connection, but Claude Desktop
+  isn't sending it anything (when this was seen, Desktop's Hardware
+  Buddy window said disconnected). This is the computer's Bluetooth
+  state, not the badge: it happened on macOS after two badges had
+  been connecting to the same Mac, and the same app build that got
+  stuck worked again afterwards. To fix it:
+  1. Quit Claude Desktop.
+  2. Remove any `Claude_…` devices from the computer's Bluetooth
+     settings.
+  3. Turn Bluetooth off and on.
+  4. Open Claude Desktop, and in the Hardware Buddy window click
+     **Forget**, then **Connect** and pick the badge.
+
+  With two badges, have only one in Claude Buddy while connecting.
+
+- **`No data` in the header:** the badge is still connected but has
+  had no update for 30 s. Likely causes are the computer going to
+  sleep, Claude Desktop quitting, or the badge being out of range. The badge can't tell, so after
+  60 s it drops the link and advertises again, ready for Desktop to
+  reconnect when the computer wakes. Not yet tested: whether Desktop
+  reconnects by itself after the computer sleeps. If it doesn't,
+  click **Connect** in the Hardware Buddy window; if that doesn't
+  work either, try the reset above.
+- **Does the badge sleep while it watches Claude?** No, on USB power
+  or battery. Badgeware has no idle timer of its own; a badge only
+  sleeps when an app asks it to, and Claude Buddy never does (see
+  [Why the badge never sleeps](docs/power.md#why-the-badge-never-sleeps)).
+  On battery it saves what it can instead (see
+  [Power and screen refreshes](#power-and-screen-refreshes)), so it
+  keeps running until the battery is flat. Exit the app (C) when you
+  aren't using it.
+
 ## Security
 
 The BLE link is **unencrypted**. Badgeware's rp2 MicroPython builds

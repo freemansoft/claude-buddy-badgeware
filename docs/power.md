@@ -134,6 +134,13 @@ battery. Claude Buddy deliberately calls neither:
   schedule.** A badge that woke every N seconds would miss prompts or
   answer them late, and would have to reconnect each time.
 
+Nothing else puts the badge to sleep either. Badgeware has no idle
+timer: in the v3.1.1 source of both firmwares, the only sleep is
+`badge.sleep()` called by an app. `wait_for_button_or_alarm()` (on the
+Badger; the Tufty's firmware doesn't have it) sleeps only for apps
+that call it, and neither `run()` nor the launcher sleeps while an
+app is open.
+
 So while the app is open it stays awake with the radio on, on USB
 power and on battery alike. The 20 ms loop pause (`time.sleep_ms`) is
 a CPU idle, not deep sleep. Battery life is therefore much shorter

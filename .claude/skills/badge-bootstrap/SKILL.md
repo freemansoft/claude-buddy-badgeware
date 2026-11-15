@@ -156,3 +156,9 @@ ejecting doesn't restart a badge put into drive mode this way.
   Badgeware failed to import, which usually means a damaged or
   non-Badgeware firmware. Reflash with `--with-filesystem` (after
   asking).
+- **Installed and connected, but stuck on "Waiting for the first
+  update from Claude"** (or `No data` that never clears): check the
+  computer's Bluetooth before suspecting the firmware or the app. Walk
+  the user through the README's
+  [Troubleshooting](../../../README.md#troubleshooting) reset, and if
+  in doubt, A/B against the `main` build. Don't reflash for this.

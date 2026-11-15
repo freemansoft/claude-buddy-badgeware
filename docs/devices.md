@@ -38,29 +38,52 @@ every change shows at once. On **battery** it keeps the Badger's
 timings, because every redraw costs power. Both come from its profile
 (`refresh_usb`, `refresh_battery`; see below).
 
-| Setting                 | Badger 2350 (e-ink, USB and battery)                                     | Tufty 2350 (live on USB; e-ink timings on battery)                                                                                               |
-| ----------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `badge.mode()`          | `FAST_UPDATE \| NON_BLOCKING`                                            | `HIRES`                                                                                                                                          |
-| What triggers a repaint | The screen key changes (`screen_key`: battery and tokens excluded)       | On USB: **any** change, battery and tokens included. On battery: same as the Badger                                                              |
-| Urgent settle delay     | 300 ms                                                                   | On USB: none. On battery: 300 ms                                                                                                                 |
-| Status-only changes     | Coalesced, at most one repaint every 15 s                                | On USB: at once. On battery: at most every 15 s, as on the Badger                                                                                |
-| After A/B               | ~1 s hold, so the result and Desktop's follow-up share one refresh       | On USB: no hold. On battery: ~1 s hold                                                                                                           |
-| "No sessions" screen    | After 5 s with no sessions, so a quick close-and-open costs no refreshes | On USB: at once. On battery: after 5 s                                                                                                           |
-| First frame             | Slowest, cleanest waveform, to clear ghosting from the menu              | Not needed                                                                                                                                       |
-| Button reading          | `update()` calls `badge.poll()` each pass                                | Badgeware's `run()` calls `badge.poll()` each loop; `update()` uses that reading and doesn't poll                                                |
-| Present                 | `display.update()`, non-blocking; painter waits while `display.busy()`   | `display.update()` on each paint; `run()` re-sends the framebuffer every loop, so `badge.default_clear = None` stops it clearing between paints  |
-| Battery label           | 25% steps (5% when low), rides along with other repaints                 | On USB the header shows `Charging`/`Full`/`USB` (no percentage). On battery: same as the Badger                                                  |
-| Tokens label            | Rounded (`31k`), rides along                                             | On USB: exact and live (`31,204 today`). On battery: same as the Badger                                                                          |
-| Colours                 | Black on white; no grey text (too faint on e-ink)                        | White on black (Badgeware's Tufty default) for the header and body; titles orange, button labels light blue, counts/tokens/page line light green |
-| Accents                 | None                                                                     | Not implemented (plan: e.g. highlight the title when the `emphasis` flag is set)                                                                 |
-| Fonts                   | `nope` pixel font, sized for 264×176                                     | MonaSans (vector, from the firmware): 18 px header and footer, 20 px body, 24 px titles; pixel fonts as fallback                                 |
-| Animation               | None: nothing on screen moves                                            | Not implemented (open question: a "working" indicator?)                                                                                          |
-| Instant feedback        | Case-light blink on A/B, because the panel takes 1–2 s                   | Not implemented (the screen itself may be fast enough)                                                                                           |
+| Setting                 | Badger 2350 (e-ink, USB and battery)                                     | Tufty 2350 (live on USB; e-ink timings on battery)                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `badge.mode()`          | `FAST_UPDATE \| NON_BLOCKING`                                            | `HIRES`                                                                                                                                         |
+| What triggers a repaint | The screen key changes (`screen_key`: battery and tokens excluded)       | On USB: **any** change, battery and tokens included. On battery: same as the Badger                                                             |
+| Urgent settle delay     | 300 ms                                                                   | On USB: none. On battery: 300 ms                                                                                                                |
+| Status-only changes     | Coalesced, at most one repaint every 15 s                                | On USB: at once. On battery: at most every 15 s, as on the Badger                                                                               |
+| After A/B               | ~1 s hold, so the result and Desktop's follow-up share one refresh       | On USB: no hold. On battery: ~1 s hold                                                                                                          |
+| "No sessions" screen    | After 5 s with no sessions, so a quick close-and-open costs no refreshes | On USB: at once. On battery: after 5 s                                                                                                          |
+| First frame             | Slowest, cleanest waveform, to clear ghosting from the menu              | Not needed                                                                                                                                      |
+| Button reading          | `update()` calls `badge.poll()` each pass                                | Badgeware's `run()` calls `badge.poll()` each loop; `update()` uses that reading and doesn't poll                                               |
+| Present                 | `display.update()`, non-blocking; painter waits while `display.busy()`   | `display.update()` on each paint; `run()` re-sends the framebuffer every loop, so `badge.default_clear = None` stops it clearing between paints |
+| Battery label           | 25% steps (5% when low), rides along with other repaints                 | On USB the header shows `Charging`/`Full`/`USB` (no percentage). On battery: same as the Badger                                                 |
+| Tokens label            | Rounded (`31k`), rides along                                             | On USB: exact and live (`31,204 today`). On battery: same as the Badger                                                                         |
+| Colours                 | Black on white; no grey text (too faint on e-ink)                        | White on black, with coloured titles, button labels and counts (see [Colour scheme](#colour-scheme))                                            |
+| Accents                 | None                                                                     | Not implemented (plan: e.g. highlight the title when the `emphasis` flag is set)                                                                |
+| Fonts                   | `nope` pixel font, sized for 264×176                                     | MonaSans (vector, from the firmware): 18 px header and footer, 20 px body, 24 px titles; pixel fonts as fallback                                |
+| Animation               | None: nothing on screen moves                                            | Not implemented (open question: a "working" indicator?)                                                                                         |
+| Instant feedback        | Case-light blink on A/B, because the panel takes 1–2 s                   | Not implemented (the screen itself may be fast enough)                                                                                          |
 
 Things that are the **same on both**: the protocol, the BLE link, the
 buttons, the case lights, the battery and USB handling in the model,
 and the rule that the app never sleeps while it's open (see
 [power.md](power.md#why-the-badge-never-sleeps)).
+
+### Colour scheme
+
+Each profile's `theme` in `apps/claude_buddy/buddy_profile.py` names
+five colours, which `Theme` in `buddy_view.py` turns into pens. The
+code is the source; keep this table in step with it.
+
+| Theme key | Used for                                 | Badger | Tufty                             |
+| --------- | ---------------------------------------- | ------ | --------------------------------- |
+| `bg`      | Background                               | White  | Black                             |
+| `fg`      | Header, body text, dividers and frame    | Black  | White                             |
+| `title`   | Screen titles (e.g. "Allow Bash?")       | Black  | Claude orange, RGB (217, 119, 87) |
+| `footer`  | Button labels ("A: Accept", "C: Exit")   | Black  | Light blue, RGB (110, 190, 255)   |
+| `meta`    | Counts, today's tokens and the page line | Black  | Light green, RGB (140, 220, 140)  |
+
+- **Badger:** black on white only. Its panel has four greys, but grey
+  text was too faint to read, so every part is black.
+- **Tufty:** white on black is Badgeware's own Tufty default. The
+  three accent colours set the fixed parts apart from Claude's text.
+  They look right on the device but haven't been checked for contrast
+  or colour blindness.
+- **Values:** each entry is either a `color` name (`"white"`) or an
+  (r, g, b) tuple; `_color()` in `buddy_view.py` handles both.
 
 ## Where the code switches
 
@@ -88,7 +111,9 @@ holds:
 - the refresh timings (`Refresh`: settle, status throttle, hold after
   A/B), **one set for USB power and one for battery**
   (`profile.refresh(on_usb)`). The painter gets the current set every
-  pass. Both badges use the e-ink timings on both power sources today.
+  pass. The Badger uses the e-ink timings on both power sources; the
+  Tufty redraws live on USB power and uses the e-ink timings on
+  battery.
 
 Adding a badge means adding a profile.
 
