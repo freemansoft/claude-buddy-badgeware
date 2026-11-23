@@ -13,10 +13,19 @@ Never press RESET or unplug the badge before the drive is ejected: the
 computer writes to the drive lazily, and files cut short on the badge
 show up later as a SyntaxError when the app starts.
 
+Rules this script keeps, so a failed install can't break the badge:
+
+- Never delete the installed app before the new copy is complete and
+  checked. The copy is built in .claude_buddy.new at the drive's root,
+  outside apps/ so the menu never lists it, compared file by file with
+  the repo, and only then swapped in with renames.
+- Always eject the drive afterwards, or tell the user to.
+
 Standard library only; works on macOS, Windows and Linux.
 """
 
 import argparse
+import filecmp
 import os
 import shutil
 import string
@@ -43,12 +52,51 @@ def _windows_label(drive):
     return buf.value if ok else ""
 
 
-def _ignore_missing(func, path, exc_info):
+def _ignore_missing(_func, _path, exc):
     """rmtree error handler. On macOS the badge's FAT drive holds "._"
     companion files that vanish along with their main file, so
     deleting one that's already gone isn't an error."""
-    if not issubclass(exc_info[0], FileNotFoundError):
-        raise exc_info[1]
+    if not isinstance(exc, FileNotFoundError):
+        raise exc
+
+
+def _remove_tree(path):
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_ignore_missing)
+    else:  # onerror is deprecated from 3.12
+        shutil.rmtree(path, onerror=lambda f, p, info: _ignore_missing(f, p, info[1]))
+
+
+def _is_junk(name):
+    """Files and folders never copied to the badge."""
+    return name in ("__pycache__", ".DS_Store") or name.endswith(".pyc") or name.startswith("._")
+
+
+def _ignore_junk(_folder, names):
+    return {name for name in names if _is_junk(name)}
+
+
+def app_files(folder):
+    """Relative paths of the files in ``folder`` that go to the badge."""
+    folder = Path(folder)
+    return [
+        str(path.relative_to(folder))
+        for path in sorted(folder.rglob("*"))
+        if path.is_file() and not any(_is_junk(part) for part in path.relative_to(folder).parts)
+    ]
+
+
+def verify_copy(src, copy):
+    """Relative paths of app files missing from ``copy`` or different
+    from ``src``. This reads the copy back through the computer's
+    cache, so it catches a bad copy but not writes lost by resetting
+    the badge before the drive is ejected; only the eject prevents
+    that."""
+    return [
+        name
+        for name in app_files(src)
+        if not (Path(copy) / name).is_file() or not filecmp.cmp(Path(src) / name, Path(copy) / name, shallow=False)
+    ]
 
 
 def remove_apple_double(target):
@@ -57,11 +105,15 @@ def remove_apple_double(target):
     The badge's drive is FAT, which can't hold extended attributes, so
     macOS stores them (com.apple.provenance at least, which it stamps on
     every new file, so copying without metadata doesn't avoid it) in a
-    "._<name>" companion file. The badge never uses them. Returns how
+    "._<name>" companion file. That includes one beside ``target``
+    itself, in its parent folder. The badge never uses them. Returns how
     many were removed; on other OSes there are none.
     """
+    target = Path(target)
+    partner = target.parent / ("._" + target.name)
+    paths = ([partner] if partner.is_file() else []) + sorted(target.rglob("._*"))
     removed = 0
-    for path in sorted(Path(target).rglob("._*")):
+    for path in paths:
         if path.is_file():
             try:
                 path.unlink()
@@ -69,6 +121,47 @@ def remove_apple_double(target):
                 continue
             removed += 1
     return removed
+
+
+def install_app(src, root):
+    """Replace apps/<APP> on the drive at ``root`` with ``src``; return
+    the installed folder.
+
+    The new copy is built and checked in .<APP>.new at the drive's root,
+    then swapped in with two renames. If the copy or the check fails
+    (drive full, cable pulled, badge reset), OSError is raised and the
+    installed app is untouched. Leftover .new and .old folders from an
+    interrupted run are removed first.
+    """
+    root = Path(root)
+    target = root / "apps" / APP
+    staging = root / ".{}.new".format(APP)
+    old = root / ".{}.old".format(APP)
+    for leftover in (staging, old):
+        if leftover.exists():
+            _remove_tree(leftover)
+
+    shutil.copytree(src, staging, ignore=_ignore_junk, copy_function=shutil.copyfile)
+    remove_apple_double(staging)
+    bad = verify_copy(src, staging)
+    if bad:
+        raise OSError("copy check failed for {}".format(", ".join(bad)))
+
+    if target.exists():
+        target.rename(old)
+    try:
+        staging.rename(target)
+    except OSError:
+        if old.exists():
+            old.rename(target)  # put the installed app back
+        raise
+    remove_apple_double(target)
+    if old.exists():
+        try:
+            _remove_tree(old)
+        except OSError as e:  # the new app is in place; this is only tidying
+            print("Couldn't remove {} ({}); the next install removes it.".format(old, e), file=sys.stderr)
+    return target
 
 
 def _run(cmd, run):
@@ -155,12 +248,15 @@ def main():
             sys.exit("Several badge drives found ({}); pass --dest.".format(", ".join(map(str, found))))
         root = found[0]
 
-    target = root / "apps" / APP
-    if target.exists():
-        shutil.rmtree(target, onerror=_ignore_missing)
-    shutil.copytree(SRC, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "._*"))
-    remove_apple_double(target)
-    print("Installed to", target)
+    print("Copying to {} ...".format(root), flush=True)
+    try:
+        target = install_app(SRC, root)
+    except OSError as e:
+        sys.exit(
+            "The copy failed ({}).\nThe app on the badge wasn't changed. Check the drive is "
+            "still mounted and has free space, then run this again.".format(e)
+        )
+    print("Installed {} files to {}".format(len(app_files(SRC)), target))
     if args.no_eject or os.name == "nt":
         print("Eject the drive before pressing RESET or unplugging, or the copied")
         print("files may be cut short. The badge then restarts into the menu.")

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
@@ -170,6 +171,98 @@ class AppleDoubleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "main.py").write_text("x")
             self.assertEqual(install.remove_apple_double(tmp), 0)
+
+    def test_removes_the_folders_own_partner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "app"
+            app.mkdir()
+            (Path(tmp) / "._app").write_text("x")
+            self.assertEqual(install.remove_apple_double(app), 1)
+            self.assertFalse((Path(tmp) / "._app").exists())
+
+
+def _write(folder, files):
+    for name, text in files.items():
+        path = Path(folder) / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+
+def _tree(folder):
+    """{relative path: text} for every file under ``folder``."""
+    folder = Path(folder)
+    return {str(p.relative_to(folder)): p.read_text() for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+class InstallAppTest(unittest.TestCase):
+    APP = {"__init__.py": "new", "buddy_model.py": "model", "assets/icon.png": "png"}
+    JUNK = {"__pycache__/x.pyc": "c", "buddy_view.pyc": "c", ".DS_Store": "d", "._buddy_model.py": "a"}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.src = Path(tmp.name) / "src"
+        self.root = Path(tmp.name) / "BADGER"
+        _write(self.src, {**self.APP, **self.JUNK})
+        _write(self.root, {"main.py": "menu", "apps/other/__init__.py": "other"})
+        self.target = self.root / "apps" / install.APP
+
+    def test_app_files_skip_junk(self):
+        self.assertEqual(install.app_files(self.src), ["__init__.py", "assets/icon.png", "buddy_model.py"])
+
+    def test_fresh_install(self):
+        self.assertEqual(install.install_app(self.src, self.root), self.target)
+        self.assertEqual(_tree(self.target), self.APP)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ["apps", "main.py"])
+
+    def test_replaces_the_old_app_and_keeps_other_apps(self):
+        _write(self.target, {"__init__.py": "old", "removed.py": "gone"})
+        install.install_app(self.src, self.root)
+        self.assertEqual(_tree(self.target), self.APP)
+        self.assertEqual(_tree(self.root / "apps" / "other"), {"__init__.py": "other"})
+
+    def test_removes_leftovers_of_an_interrupted_run(self):
+        _write(self.root / ".claude_buddy.new", {"__init__.py": "half"})
+        _write(self.root / ".claude_buddy.old", {"__init__.py": "older"})
+        install.install_app(self.src, self.root)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ["apps", "main.py"])
+
+    def test_failed_check_leaves_the_old_app(self):
+        _write(self.target, {"__init__.py": "old"})
+        with mock.patch.object(install, "verify_copy", return_value=["__init__.py"]):
+            with self.assertRaises(OSError):
+                install.install_app(self.src, self.root)
+        self.assertEqual(_tree(self.target), {"__init__.py": "old"})
+
+    def test_failed_swap_puts_the_old_app_back(self):
+        _write(self.target, {"__init__.py": "old"})
+        real_rename = Path.rename
+
+        def rename(path, dest):
+            if path.name == ".claude_buddy.new":
+                raise OSError("rename failed")
+            return real_rename(path, dest)
+
+        with mock.patch.object(install.Path, "rename", autospec=True, side_effect=rename):
+            with self.assertRaises(OSError):
+                install.install_app(self.src, self.root)
+        self.assertEqual(_tree(self.target), {"__init__.py": "old"})
+
+
+class VerifyCopyTest(unittest.TestCase):
+    def test_reports_missing_and_different_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src, copy = Path(tmp) / "src", Path(tmp) / "copy"
+            _write(src, {"a.py": "x" * 5000, "b.py": "b", "c.py": "c", "._a.py": "junk"})
+            _write(copy, {"a.py": "x" * 4096, "b.py": "b"})  # a.py cut to one FAT cluster; c.py missing
+            self.assertEqual(install.verify_copy(src, copy), ["a.py", "c.py"])
+
+    def test_identical_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src, copy = Path(tmp) / "src", Path(tmp) / "copy"
+            _write(src, {"a.py": "a", "sub/b.py": "b"})
+            _write(copy, {"a.py": "a", "sub/b.py": "b"})
+            self.assertEqual(install.verify_copy(src, copy), [])
 
 
 if __name__ == "__main__":
