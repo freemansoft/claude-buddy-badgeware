@@ -20,6 +20,10 @@ to keep the docs that describe the power and device behaviour true.
    the code is supposed to do, and you'll have to update them anyway:
    - `docs/power.md`: power consumers, USB vs battery, the constants;
    - `docs/devices.md`: Badger (e-ink) vs Tufty (LCD) differences;
+   - the `badgeware-platforms` skill: how the two badges' firmware
+     differs (run loop, screen, `main.py`, built-in names), read from
+     the source in `vendor/`, for anything touching the display, the
+     loop, buttons or start-up;
    - `docs/protocol.md`: if the change touches messages or BLE.
 2. Check whether the request reverses a recorded decision: the
    "Decisions" section of `docs/protocol.md` (e.g. no clock on screen)
@@ -58,6 +62,11 @@ in the invariants reference.
   (README roadmap).
 
 ### Device and display split
+
+The firmware facts behind this split (what `run()` does on each badge,
+which names exist only on the Badger, and so on) are in the
+`badgeware-platforms` skill, with the `vendor/` file for each. This
+section is the app's own rule for handling them.
 
 Every difference between the badges lives in their profiles in
 `buddy_profile.py` (`BADGER`, `TUFTY`): display mode, Badgeware loop
@@ -104,11 +113,13 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
    steps CI runs on every pull request (`.github/workflows/ci.yml`):
 
    ```bash
-   pip install -r requirements-dev.txt   # once: ruff, mpy-cross, mpremote
-   python3 -m unittest discover -s tests -v
-   ruff check .
-   find apps/claude_buddy -name '*.py' -print0 | xargs -0 -n1 python3 -m mpy_cross -o /dev/null
+   .venv/bin/python -m unittest discover -s tests -v
+   .venv/bin/ruff check .
+   find apps/claude_buddy -name '*.py' -print0 | xargs -0 -n1 .venv/bin/python -m mpy_cross -o /dev/null
    ```
+
+   If `.venv` or `vendor/` is missing, set them up as `CLAUDE.md`
+   says (`ruff check` needs the submodules for Pimoroni's rules).
 
 2. Add or update tests for any power rule you touched. The painter and
    model tests use fake clocks, so refresh counts and throttles can be
@@ -126,6 +137,14 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
    hand. Installing restarts the badge and drops its Claude Desktop
    connection, so check first if the user is in the middle of
    something.
+   - **Check the firmware first.** With the badge on USB in normal
+     mode, run `python3 tools/badge_info.py` (it restarts the badge
+     when done). If it says **OLDER** (or can't tell), stop, tell the
+     user, and offer the update with the `badge-bootstrap` skill
+     (`tools/flash_firmware.py`) before installing. If the badge is
+     already in disk mode, the firmware can't be read: ask whether it
+     was checked earlier in this session, or have the user eject and
+     press RESET so you can check it.
    - Ask the user to **double-tap RESET**; the badge mounts as
      `BADGER` or `TUFTY`. Without the buttons, see "Updating the app
      without the buttons" in the `badge-bootstrap` skill.
@@ -135,13 +154,19 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
      changed: check the drive is mounted and run it again. If it says
      it couldn't eject (or on Windows), have the user eject before
      pressing RESET or unplugging.
+   - After the eject, with the badge back in normal mode, check the
+     copy from the badge's side: `python3 tools/badge_check.py files`.
+     It compares names and sizes on the badge with the repo and
+     reports missing, cut-short (`different size`) or extra files and
+     `._` junk; reinstall on anything but "The badge's copy matches.".
+     It restarts the badge when done.
    - The user opens **Claude Buddy** from the menu (select it, press
      **B**). For layout or refresh changes, try both badges if both
      are available.
    - If the app then fails with an error the repo code doesn't have
      (often a `SyntaxError`), its files on the badge are probably cut
-     short. Mount the drive and compare `apps/claude_buddy/` on it
-     with the repo (`cmp` each file) before debugging the code.
+     short. Run `badge_check.py files` (or mount the drive and `cmp`
+     each file with the repo) before debugging the code.
 5. Tell the user what you couldn't check: the layout on the panel,
    real refresh timing, and power draw all need hardware. If you
    didn't install the change, say so.

@@ -100,6 +100,18 @@ class ParseInfoTest(unittest.TestCase):
             badge_info.parse_info("Traceback ...")
 
 
+class RestartTest(unittest.TestCase):
+    def test_badge_info_restarts_the_badge_after_reading_it(self):
+        # mpremote stops the running program; without a reset the badge
+        # sits on a frozen screen until someone presses RESET.
+        cmd = badge_info.mpremote_command("/dev/cu.usbmodem201401")
+        self.assertEqual(cmd[:4], ["mpremote", "connect", "/dev/cu.usbmodem201401", "exec"])
+        self.assertEqual(cmd[-1], "reset")
+
+    def test_no_restart_leaves_it_stopped(self):
+        self.assertNotIn("reset", badge_info.mpremote_command("/dev/x", restart=False))
+
+
 class FakeRun:
     """Stands in for subprocess.run: records each command and answers
     from ``results`` ({command name: (returncode, stdout)}); a missing

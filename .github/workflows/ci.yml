@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true # vendor/: Pimoroni's ruff rules and firmware source
 
       - uses: actions/setup-python@v7
         with:
@@ -37,7 +39,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       # The same check as .githooks/pre-commit, for everyone: committed
-      # Markdown must be prettier-formatted. Keep the version in step
-      # with the hook.
+      # Markdown (git ls-files skips the vendor/ submodules) must be
+      # prettier-formatted, with the version in .prettier-version.
       - name: Markdown formatting (prettier)
-        run: git ls-files -z '*.md' | xargs -0 npx --yes prettier@3.9.10 --config .prettierrc.json --check
+        run: git ls-files -z '*.md' | xargs -0 npx --yes prettier@$(cat .prettier-version) --config .prettierrc.json --check

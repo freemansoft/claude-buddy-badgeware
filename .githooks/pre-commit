@@ -1,37 +1,103 @@
 #!/bin/sh
-# Block a commit if any staged Markdown file isn't prettier-formatted.
+# Block a commit if a staged file fails the quick checks CI also runs:
+#
+# - Markdown (*.md): prettier-formatted, with the version in
+#   .prettier-version and the settings in .prettierrc.json;
+# - Python (*.py): ruff check, with ruff.toml (Pimoroni's rules);
+# - app files (apps/claude_buddy/*.py): compile with mpy-cross, as
+#   MicroPython on the badge would.
 #
 # Enable once per clone:   git config core.hooksPath .githooks
-# Fix the files:           npx --yes prettier@3.9.10 --write <files>
+# Fix Markdown:            npx --yes prettier@$(cat .prettier-version) --write <files>
 #
 # It checks the *staged* content, not the working copy, so a file that
-# is formatted on disk but staged unformatted is still caught. The
-# prettier version is pinned so everyone formats the same way; keep it
-# in step with .claude/skills/buddy-docs/SKILL.md and the README.
-
-PRETTIER="prettier@3.9.10"
+# is fine on disk but staged broken is still caught. ruff and mpy-cross
+# come from .venv (see CLAUDE.md), else from PATH. POSIX sh.
 
 root=$(git rev-parse --show-toplevel) || exit 1
-files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md')
-[ -z "$files" ] && exit 0
-
-if ! command -v npx >/dev/null 2>&1; then
-  echo "pre-commit: npx not found; can't check Markdown formatting." >&2
-  echo "Install Node.js, or skip this check once with: git commit --no-verify" >&2
-  exit 1
-fi
+PRETTIER="prettier@$(cat "$root/.prettier-version")" || exit 1
 
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-# Copy the staged versions out, then check them with the repo's config.
-git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' |
-  git checkout-index -z --stdin --prefix="$tmp/"
+missing() {
+  echo "pre-commit: $1 not found; can't check $2." >&2
+  echo "$3, or skip this check once with: git commit --no-verify" >&2
+  exit 1
+}
 
-if ! (cd "$tmp" && npx --yes "$PRETTIER" --config "$root/.prettierrc.json" --check .); then
+# --- Markdown: prettier ---------------------------------------------------
+
+md=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md')
+if [ -n "$md" ]; then
+  command -v npx >/dev/null 2>&1 ||
+    missing npx "Markdown formatting" "Install Node.js"
+
+  # Copy the staged versions out, then check them with the repo's config.
+  mkdir "$tmp/md" || exit 1
+  git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' |
+    git checkout-index -z --stdin --prefix="$tmp/md/"
+
+  if ! (cd "$tmp/md" && npx --yes "$PRETTIER" --config "$root/.prettierrc.json" --check .); then
+    echo "" >&2
+    echo "pre-commit: staged Markdown isn't prettier-formatted. Fix with:" >&2
+    echo "  npx --yes $PRETTIER --write $(echo "$md" | tr '\n' ' ')" >&2
+    echo "then git add the files again." >&2
+    exit 1
+  fi
+fi
+
+# --- Python: ruff check and mpy-cross -------------------------------------
+
+py=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ -z "$py" ] && exit 0
+setup="Set up .venv as CLAUDE.md says (pip install -r requirements-dev.txt)"
+
+if [ -x "$root/.venv/bin/ruff" ]; then
+  ruff="$root/.venv/bin/ruff"
+elif command -v ruff >/dev/null 2>&1; then
+  ruff=ruff
+else
+  missing ruff "Python lint" "$setup"
+fi
+
+# --stdin-filename applies ruff.toml's per-file-ignores to the staged
+# text; --force-exclude keeps its excludes (vendor/).
+failed=0
+for f in $py; do
+  git show ":$f" | (cd "$root" && "$ruff" check --quiet --force-exclude --stdin-filename "$f" -) || failed=1
+done
+if [ "$failed" -ne 0 ]; then
   echo "" >&2
-  echo "pre-commit: staged Markdown isn't prettier-formatted. Fix with:" >&2
-  echo "  npx --yes $PRETTIER --write $(echo "$files" | tr '\n' ' ')" >&2
-  echo "then git add the files again." >&2
+  echo "pre-commit: ruff check failed on the staged Python above." >&2
+  echo "Fix it (.venv/bin/ruff check --fix <files> may help), then git add again." >&2
   exit 1
 fi
+
+app=$(echo "$py" | grep '^apps/claude_buddy/')
+[ -z "$app" ] && exit 0
+
+venv_python="$root/.venv/bin/python"
+if [ -x "$venv_python" ] && "$venv_python" -m mpy_cross --version >/dev/null 2>&1; then
+  mpy() { "$venv_python" -m mpy_cross "$@"; }
+elif command -v mpy-cross >/dev/null 2>&1; then
+  mpy() { mpy-cross "$@"; }
+else
+  missing mpy-cross "MicroPython syntax" "$setup"
+fi
+
+for f in $app; do
+  src="$tmp/py/$f"
+  mkdir -p "$(dirname "$src")" && git show ":$f" > "$src" || exit 1
+  # mpy-cross names the file in its errors; show the repo path instead.
+  if ! out=$(mpy -o /dev/null "$src" 2>&1); then
+    echo "$out" | sed "s|$src|$f|g" >&2
+    failed=1
+  fi
+done
+if [ "$failed" -ne 0 ]; then
+  echo "" >&2
+  echo "pre-commit: staged app file(s) above don't compile for MicroPython." >&2
+  exit 1
+fi
+exit 0

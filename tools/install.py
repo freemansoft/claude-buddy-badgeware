@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Copy the Claude Buddy app onto a Badgeware badge in USB disk mode.
 
+0. With the badge on USB in normal mode, check its firmware first:
+   python3 tools/badge_info.py. If it says OLDER, update the firmware
+   (README "Check and update the firmware") before installing.
 1. Double-tap RESET on the back of the badge. It mounts as a USB drive
    (BADGER, or TUFTY for a Tufty 2350).
 2. Run:  python3 tools/install.py            (finds the drive)
@@ -8,6 +11,7 @@
      or  python tools\\install.py --dest E:\\
 3. On macOS and Linux the script ejects the drive itself and the badge
    restarts into the menu. On Windows, eject it from the taskbar.
+4. Check the copy from the badge's side: python3 tools/badge_check.py files
 
 Never press RESET or unplug the badge before the drive is ejected: the
 computer writes to the drive lazily, and files cut short on the badge
@@ -248,6 +252,9 @@ def main():
             sys.exit("Several badge drives found ({}); pass --dest.".format(", ".join(map(str, found))))
         root = found[0]
 
+    print("Reminder: check the badge's firmware before installing (tools/badge_info.py,")
+    print("in normal mode). If you didn't, run it after the eject and update the")
+    print("firmware if it says OLDER.")
     print("Copying to {} ...".format(root), flush=True)
     try:
         target = install_app(SRC, root)
@@ -262,7 +269,8 @@ def main():
         print("files may be cut short. The badge then restarts into the menu.")
     elif eject(root):
         print("Ejected {}. The badge restarts into the menu; if it doesn't,".format(root))
-        print("press RESET (safe now).")
+        print("press RESET (safe now). Then check the copy from the badge's side:")
+        print("  python3 tools/badge_check.py files")
     else:
         print("Couldn't eject {}. Eject it yourself before pressing RESET or".format(root))
         print("unplugging, or the copied files may be cut short.")
