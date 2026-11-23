@@ -308,6 +308,15 @@ Always eject before pressing RESET or unplugging the badge. The
 computer finishes writing to the drive in the background, and a
 restart before then leaves files cut short on the badge.
 
+The script is safer than copying by hand. It builds the new copy in a
+hidden `.claude_buddy.new` folder at the drive's root, compares every
+file with the repo, and only then swaps it into `apps/`. If the copy
+or the check fails (drive full, cable pulled), the app already on the
+badge isn't changed. It also deletes the `._` files macOS writes
+beside each file on the drive, which the badge never uses. The check
+reads the files back through the computer's cache, so it doesn't
+replace ejecting.
+
 ## Connect to Claude Desktop
 
 1. On the badge, open **Claude Buddy**. It shows `Pair with Claude`
@@ -374,6 +383,12 @@ They haven't yet been checked against this badge on both platforms.
   after earlier installs where the badge restarted before the drive
   was ejected. Reinstall with `python3 tools/install.py` and let it
   eject the drive (or eject it yourself) before touching RESET.
+- **`install.py` says "The copy failed":** the new copy didn't finish
+  or didn't match the repo, often because the drive was ejected or
+  unplugged, the badge reset, or the drive is full. The app on the
+  badge wasn't changed. Make sure the drive is mounted and run the
+  script again; it removes any half-built `.claude_buddy.new` or
+  leftover `.claude_buddy.old` folder first.
 - **Does the badge sleep while it watches Claude?** No, on USB power
   or battery. Badgeware has no idle timer of its own; a badge only
   sleeps when an app asks it to, and Claude Buddy never does (see

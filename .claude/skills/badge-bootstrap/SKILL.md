@@ -130,6 +130,13 @@ the app later fails with a `SyntaxError` in a truncated file. If
 `install.py` says it couldn't eject, have the user eject before
 anything else.
 
+If `install.py` exits with "The copy failed", the app on the badge
+wasn't changed: the new copy is built and checked in
+`.claude_buddy.new` at the drive's root and swapped into `apps/` only
+when every file matches the repo. Check the drive is still mounted
+(and not full), then run it again. Don't fall back to copying by hand,
+which has no check and leaves a half-copied app if it's interrupted.
+
 Both badges are supported. The Tufty's MonaSans font comes from the
 firmware's own filesystem (`/system/assets/fonts`); after a
 `--firmware-only` flash of a badge whose files are older, check the
