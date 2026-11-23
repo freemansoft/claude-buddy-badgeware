@@ -44,7 +44,7 @@ seem to disagree, because they were tried on the hardware.
 | `State`, filesystem helpers                          | same                                                                                                              | same                                                                                                                                                                                             | `vendor/tufty2350/modules/common/badgeware/state.py`, `vendor/tufty2350/modules/common/badgeware/filesystem.py`                                  |
 | Fonts                                                | same set                                                                                                          | same                                                                                                                                                                                             | `vendor/tufty2350/romfs/fonts`                                                                                                                   |
 | Power source                                         | `badge.usb_connected()`                                                                                           | same                                                                                                                                                                                             | `vendor/tufty2350/modules/common/badgeware/badge.py`                                                                                             |
-| Lint rules (`ci/ruff.toml`, what Pimoroni's CI runs) | same                                                                                                              | same; `tests/test_ruff_config.py` checks they stay identical                                                                                                                                     | `vendor/badger2350/ci/ruff.toml`, `vendor/tufty2350/ci/ruff.toml`, `vendor/tufty2350/ci/python.sh`                                               |
+| Lint rules (`ci/ruff.toml`, what Pimoroni's CI runs) | same                                                                                                              | same; `tests/project/test_ruff_config.py` checks they stay identical                                                                                                                             | `vendor/badger2350/ci/ruff.toml`, `vendor/tufty2350/ci/ruff.toml`, `vendor/tufty2350/ci/python.sh`                                               |
 
 ## General rules for Badgeware app code
 
@@ -97,9 +97,9 @@ When Pimoroni releases new firmware and the badges are updated to it:
 1. Check out the new tag in both `vendor/badger2350` and
    `vendor/tufty2350`.
 2. Re-check every row above against the new source and fix the rows
-   and citations (`tests/test_platform_skill.py` fails on a cited path
+   and citations (`tests/project/test_platform_skill.py` fails on a cited path
    that no longer exists).
 3. Run `.venv/bin/ruff check .` and the tests:
-   `tests/test_ruff_config.py` fails if the two `ci/ruff.toml` files
+   `tests/project/test_ruff_config.py` fails if the two `ci/ruff.toml` files
    now differ, and someone has to decide which rules to follow.
 4. Update the version the README's References section names.

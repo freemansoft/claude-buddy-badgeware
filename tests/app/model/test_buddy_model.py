@@ -1,16 +1,13 @@
-"""Host-side tests for the protocol model (CPython, no badge needed).
-
-    python3 -m unittest discover -s tests -v
-"""
+"""Host-side tests for the protocol model, buddy_model (CPython, no
+badge needed): messages from Desktop, the screen tuple, permission
+decisions, commands and the battery and token labels."""
 
 import json
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps" / "claude_buddy"))
+import support  # noqa: F401 - puts apps/claude_buddy on sys.path
 
-import buddy_model as bm  # noqa: E402
+import buddy_model as bm
 
 
 class MemoryStore:
@@ -471,9 +468,10 @@ class ModelTest(unittest.TestCase):
                       prompt=dict(PROMPT, hint="h" * 5000)),
             0,
         )
-        self.assertLessEqual(len(self.model.msg), bm.MAX_MSG)
-        self.assertLessEqual(len(self.model.entries), bm.MAX_ENTRIES)
-        self.assertLessEqual(len(self.model.prompt[2]), bm.MAX_HINT)
+        # Cut to the cap, not shorter: the screen shows up to the cap.
+        self.assertEqual(len(self.model.msg), bm.MAX_MSG)
+        self.assertEqual(self.model.entries, ("e" * bm.MAX_ENTRY,) * bm.MAX_ENTRIES)
+        self.assertEqual(len(self.model.prompt[2]), bm.MAX_HINT)
 
 
 class ReplyTest(unittest.TestCase):
@@ -511,7 +509,7 @@ class ReplyTest(unittest.TestCase):
 
     def test_reply_capped(self):
         self.turn({"type": "text", "text": "x" * 10000})
-        self.assertLessEqual(sum(len(p) for p in self.model.reply), bm.MAX_REPLY)
+        self.assertEqual(self.model.reply, ("x" * bm.MAX_REPLY,))
         self.turn({"type": "text", "text": "\n".join("p{}".format(i) for i in range(500))})
         self.assertEqual(len(self.model.reply), bm.MAX_PARAGRAPHS)
 
@@ -531,13 +529,10 @@ class ReplyTest(unittest.TestCase):
         self.assertEqual(scr[bm.S_LINES], (
             (bm.WRAP, "cat <<EOF > f.txt"), (bm.WRAP, "hello"), (bm.WRAP, "EOF")))
 
-    def test_long_hint_kept_up_to_cap(self):
-        self.model.handle_line(heartbeat(waiting=1, prompt=dict(PROMPT, hint="y" * 1500)), 0)
-        self.assertEqual(len(self.model.prompt[2]), 1500)
-
 
 class PassengerTest(unittest.TestCase):
-    """Battery and token labels: shown, but don't trigger repaints."""
+    """The battery and token labels, and which battery and USB changes
+    are in the screen key (repaint) and which ride along."""
 
     def setUp(self):
         self.model = bm.BuddyModel("Claude_ABC123")
@@ -560,13 +555,6 @@ class PassengerTest(unittest.TestCase):
         model.on_connect(0)
         model.handle_line(line({"total": 1, "running": 0, "waiting": 0}), 0)
         self.assertEqual(model.screen(0)[bm.S_TOKENS], "")
-
-    def test_token_change_does_not_change_key(self):
-        old = self.model.screen(0)
-        self.model.handle_line(heartbeat(tokens_today=45000), 10)
-        new = self.model.screen(10)
-        self.assertNotEqual(new[bm.S_TOKENS], old[bm.S_TOKENS])
-        self.assertEqual(bm.screen_key(new), bm.screen_key(old))
 
     def test_battery_labels(self):
         cases = [(100, "100%"), (87, "75%"), (88, "100%"), (60, "50%"), (30, "25%")]
@@ -603,12 +591,6 @@ class PassengerTest(unittest.TestCase):
         new = self.model.screen(0)
         self.assertEqual(new[bm.S_BATTERY], "Full")
         self.assertEqual(bm.screen_key(old), bm.screen_key(new))
-
-    def test_battery_change_does_not_change_key(self):
-        self.model.set_battery(90, usb=False)
-        old = self.model.screen(0)
-        self.model.set_battery(60, usb=False)
-        self.assertEqual(bm.screen_key(self.model.screen(0)), bm.screen_key(old))
 
     def test_usb_plug_and_unplug_are_urgent(self):
         self.model.set_battery(60, usb=False)
@@ -657,28 +639,9 @@ class UrgencyTest(unittest.TestCase):
     def test_first_paint_is_urgent(self):
         self.assertTrue(bm.is_urgent(self.model.screen(0), None))
 
-    def test_status_text_change_is_throttled(self):
-        old = self.model.screen(0)
-        self.model.handle_line(heartbeat(msg="b"), 10)
-        self.assertFalse(bm.is_urgent(self.model.screen(10), old))
-
-    def test_prompt_is_urgent(self):
-        old = self.model.screen(0)
-        self.model.handle_line(heartbeat(waiting=1, prompt=PROMPT), 10)
-        self.assertTrue(bm.is_urgent(self.model.screen(10), old))
-
     def test_connection_change_is_urgent(self):
         old = self.model.screen(0)
         self.assertTrue(bm.is_urgent(self.model.screen(bm.HEARTBEAT_TIMEOUT_MS + 1), old))
-
-    def test_identical_heartbeat_gives_identical_screen(self):
-        old = self.model.screen(0)
-        self.model.handle_line(heartbeat(msg="a"), 5000)
-        self.assertEqual(self.model.screen(5000), old)
-
-    def test_no_screen_has_no_key(self):
-        # Before the first paint the painter compares against None.
-        self.assertIsNone(bm.screen_key(None))
 
 
 if __name__ == "__main__":

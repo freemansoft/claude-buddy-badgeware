@@ -1,13 +1,14 @@
-"""The prettier version lives in one place, .prettier-version. The hook,
-CI, README and skills read it or point at it; this fails if any tracked
-file writes the version out again."""
+"""The prettier version lives in one place, .prettier-version. The hook
+and CI read it, and the README and skills point at it; these fail if the
+file isn't a bare version, if any tracked file writes the version out
+again, or if the hook or CI stop reading it."""
 
 import re
 import subprocess
 import unittest
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from support import ROOT
+
 PINNED = re.compile(r"prettier@\d")
 
 
@@ -36,8 +37,13 @@ class PrettierVersionTest(unittest.TestCase):
         self.assertEqual(pinned, [])
 
     def test_hook_and_ci_read_the_version_file(self):
+        # In a command, not just a comment: both files also mention the
+        # file in comments.
+        reads = re.compile(r'prettier@\$\(cat "?[^)"]*\.prettier-version')
         for name in (".githooks/pre-commit", ".github/workflows/ci.yml"):
-            self.assertIn(".prettier-version", (ROOT / name).read_text(), name)
+            code = [line for line in (ROOT / name).read_text().splitlines()
+                    if not line.lstrip().startswith("#")]
+            self.assertTrue(any(reads.search(line) for line in code), name)
 
 
 if __name__ == "__main__":

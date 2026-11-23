@@ -90,9 +90,10 @@ press is lost).
 - Put refresh decisions in `buddy_painter.py` and their timings in
   the profile's `Refresh`. The Badger's must stay the e-ink timings
   on both power sources, never live; only its status throttle differs
-  (5 s on USB, 10 s on battery). `test_profile.py` checks this.
+  (5 s on USB, 10 s on battery). `tests/app/test_profile.py` checks
+  this.
 - Check layout changes at both sizes: `TuftyViewTest` in
-  `tests/test_device_logic.py` reruns the view tests at 320×240. On
+  `tests/app/display/test_view.py` reruns the view tests at 320×240. On
   hardware, the Tufty needs a look as well as the Badger.
 - If a change needs a Tufty decision you can't try on the device,
   record it in `docs/devices.md` as _Not implemented_ with the plan,
@@ -123,7 +124,7 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
 
 2. Add or update tests for any power rule you touched. The painter and
    model tests use fake clocks, so refresh counts and throttles can be
-   asserted directly (see `tests/test_painter.py`).
+   asserted directly (see `tests/app/display/test_painter.py`).
 3. Update the docs in the same change, then format them (buddy-docs):
    - a constant's value changed: grep the docs for the old value and
      the constant's name (`docs/power.md` has a settings table, and the

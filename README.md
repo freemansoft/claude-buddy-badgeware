@@ -449,7 +449,9 @@ apps/claude_buddy/          the Badgeware app (copied to the badge)
 docs/protocol.md            the protocol subset implemented, and decisions
 docs/power.md               power management: USB power vs battery
 docs/devices.md             Badger (e-ink) vs Tufty (LCD) display differences
-tests/                      host-side unit tests (CPython, unittest)
+tests/app/                  host tests of the app on stand-ins for Badgeware and BLE
+tests/tools/                host tests of tools/
+tests/project/              doc links, skill citations, prettier and ruff config
 tools/install.py            copy the app to the badge's USB drive
 tools/badge_info.py         which badge is on USB, and is its firmware current
 tools/badge_check.py        check the installed copy from the badge's side
@@ -510,7 +512,7 @@ the checks.
 ### Checks on the host
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v   # protocol, wrapping, paging, repaint policy, framing, tools
+.venv/bin/python -m unittest discover -s tests -v   # app (protocol, view, repaint, BLE, power), tools, docs and config
 .venv/bin/ruff check .                              # Pimoroni's lint rules
 find apps/claude_buddy -name '*.py' -print0 | xargs -0 -n1 .venv/bin/python -m mpy_cross -o /dev/null   # MicroPython syntax
 git ls-files -z '*.md' | xargs -0 npx --yes prettier@$(cat .prettier-version) --config .prettierrc.json --check   # Markdown formatting
@@ -736,7 +738,7 @@ against is also in this repo, as the `vendor/badger2350` and
 - [ci/ruff.toml](https://github.com/pimoroni/badger2350/blob/main/ci/ruff.toml):
   the lint rules this repo's `ruff.toml` extends (from the
   `vendor/tufty2350` submodule; the Badger's and Tufty's files are
-  identical, and `tests/test_ruff_config.py` checks they stay so).
+  identical, and `tests/project/test_ruff_config.py` checks they stay so).
 - [pimoroni/tufty2350](https://github.com/pimoroni/tufty2350): the
   Tufty 2350 firmware. Its `run()` in
   `modules/common/badgeware/__init__.py` clears and sends the screen

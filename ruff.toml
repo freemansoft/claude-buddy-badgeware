@@ -1,8 +1,8 @@
 # Lint rules for the whole repo: Pimoroni's own (the file their badge
 # firmware CI uses, identical in vendor/tufty2350 and vendor/badger2350),
 # so the app reads like the stock apps and the tools and tests follow the
-# same rules. extend takes one file; tests/test_ruff_config.py fails if
-# the Tufty's and the Badger's ever differ.
+# same rules. extend takes one file; tests/project/test_ruff_config.py
+# fails if the Tufty's and the Badger's ever differ.
 # Needs the submodules: git submodule update --init
 #
 #   .venv/bin/ruff check .

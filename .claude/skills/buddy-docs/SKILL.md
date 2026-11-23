@@ -33,7 +33,7 @@ user rather than setting it silently. Don't bypass the hook with
 
 To change the prettier version, change `.prettier-version` only. The
 hook and CI read it, and the docs point at it rather than repeating the
-number; `tests/test_prettier_version.py` fails if a file writes the
+number; `tests/project/test_prettier_version.py` fails if a file writes the
 version out again.
 
 ## Wrapping and layout

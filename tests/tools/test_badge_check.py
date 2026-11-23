@@ -2,14 +2,13 @@
 the installed copy from the badge's side. No badge needed.
 (Adapted from freemansoft/MoodBadger2350.)"""
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+import support  # noqa: F401 - puts tools/ on sys.path
 
-import badge_check  # noqa: E402
+import badge_check
 
 
 class SnippetTest(unittest.TestCase):

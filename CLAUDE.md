@@ -28,7 +28,11 @@ git ls-files -z '*.md' | xargs -0 npx --yes prettier@$(cat .prettier-version) --
 ```
 
 - Tests are host-only (CPython with stand-ins for Badgeware); no badge
-  needed
+  needed. `tests/app/` tests the app (`model/`, `display/`, `ble/`,
+  `power/`, plus the profile and receive log), `tests/tools/` the
+  tools, `tests/project/` the docs and config. Each folder has an
+  `__init__.py` so discovery finds it; `tests/support.py` puts the app
+  and tools on `sys.path`
 - Lint: `ruff.toml` extends Pimoroni's `vendor/tufty2350/ci/ruff.toml`,
   so it needs the submodules. `ruff format` is not used: Pimoroni's
   firmware CI only runs `ruff check`
