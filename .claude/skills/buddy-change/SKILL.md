@@ -1,6 +1,6 @@
 ---
 name: buddy-change
-description: Checklist for changing Claude Buddy's implementation (anything under apps/claude_buddy/) without breaking its power management or the Badger/Tufty display split. Use whenever you edit, refactor, fix or add a feature to the badge app, including the main loop, the painter's refresh policy, battery/USB handling, case lights, BLE timing, screens or layout, even if the request doesn't mention power or devices. Also use when asked to review such a change. For BLE/protocol message changes, use buddy-protocol as well; for the docs it touches, buddy-docs.
+description: Checklist for changing Claude Buddy's implementation (anything under apps/claude_buddy/) without breaking its power management or the Badger/Tufty display split. Use whenever you edit, refactor, fix or add a feature to the badge app, including the main loop, the painter's refresh policy, battery/USB handling, case lights, BLE timing, screens or layout, even if the request doesn't mention power or devices. Also covers checking the change and installing (deploying) it on a badge to try it. Also use when asked to review such a change. For BLE/protocol message changes, use buddy-protocol as well; for the docs it touches, buddy-docs.
 ---
 
 # Changing the Claude Buddy implementation
@@ -100,12 +100,14 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
 
 ## After editing
 
-1. Run the host checks and report the real output:
+1. Run the host checks and report the real output. They're the same
+   steps CI runs on every pull request (`.github/workflows/ci.yml`):
 
    ```bash
+   pip install -r requirements-dev.txt   # once: ruff, mpy-cross, mpremote
    python3 -m unittest discover -s tests -v
    ruff check .
-   mpy-cross apps/claude_buddy/<changed file>.py   # if installed
+   find apps/claude_buddy -name '*.py' -print0 | xargs -0 -n1 python3 -m mpy_cross -o /dev/null
    ```
 
 2. Add or update tests for any power rule you touched. The painter and
@@ -118,8 +120,31 @@ the cost (e.g. "one extra e-ink refresh per connect"), and update
    - USB vs battery behaviour: `docs/power.md`;
    - Badger vs Tufty behaviour: `docs/devices.md`;
    - anything a user sees: the README.
-4. Tell the user what you couldn't check on the host: the layout on
-   the panel, real refresh timing, and power draw all need hardware.
+4. Install the change on the badge, once the host checks pass, if the
+   user wants to try it on hardware. The steps are in the README's
+   "Making a change"; always use `tools/install.py`, never a copy by
+   hand. Installing restarts the badge and drops its Claude Desktop
+   connection, so check first if the user is in the middle of
+   something.
+   - Ask the user to **double-tap RESET**; the badge mounts as
+     `BADGER` or `TUFTY`. Without the buttons, see "Updating the app
+     without the buttons" in the `badge-bootstrap` skill.
+   - Run `python3 tools/install.py`. It builds and checks the copy
+     before replacing the app, then ejects the drive on macOS and
+     Linux. If it says "The copy failed", the app on the badge wasn't
+     changed: check the drive is mounted and run it again. If it says
+     it couldn't eject (or on Windows), have the user eject before
+     pressing RESET or unplugging.
+   - The user opens **Claude Buddy** from the menu (select it, press
+     **B**). For layout or refresh changes, try both badges if both
+     are available.
+   - If the app then fails with an error the repo code doesn't have
+     (often a `SyntaxError`), its files on the badge are probably cut
+     short. Mount the drive and compare `apps/claude_buddy/` on it
+     with the repo (`cmp` each file) before debugging the code.
+5. Tell the user what you couldn't check: the layout on the panel,
+   real refresh timing, and power draw all need hardware. If you
+   didn't install the change, say so.
 
 ## Reviewing a change
 
