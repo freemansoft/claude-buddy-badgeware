@@ -6,6 +6,9 @@ Bluetooth LE with Claude Desktop on macOS or Windows, shows what Claude
 is doing, and lets you **accept** or **deny** permission prompts from
 the badge's buttons.
 
+Video: [Claude Desktop Hardware Buddy on Pimoroni Badger 2350 and Tufty
+2350](https://youtu.be/UT2T0cCHS3o) on YouTube.
+
 > [!WARNING]
 > **No encrypted Bluetooth.** This project doesn't support encrypted
 > or paired BLE connections; the Badgeware firmware has no pairing
