@@ -121,7 +121,7 @@ def main():
     try:
         release = rel.fetch_release(args.model, args.tag)
         asset = rel.pick_asset(release, args.model, args.with_filesystem)
-    except Exception as e:
+    except (OSError, ValueError, LookupError) as e:  # offline, bad JSON, no such asset
         sys.exit("Couldn't get the release from GitHub: {}".format(e))
     print("{} {} (published {})".format(
         rel.repo_for(args.model), release["tag_name"], release.get("published_at", "")[:10]))

@@ -509,7 +509,7 @@ class PagingTest(unittest.TestCase):
             self.assertEqual(drawn["1 running, 0 waiting, 31k today"], (4, self.bottom_y()))
             self.assertEqual(drawn[marker][1], self.bottom_y())
             for text, (_, y) in drawn.items():
-                if text.startswith("word") or text.startswith("Claude:"):
+                if text.startswith(("word", "Claude:")):
                     # Whole row above the counts row, not just its top.
                     self.assertLessEqual(y + self.view.h_body, self.bottom_y() - 1, text)
 

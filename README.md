@@ -439,11 +439,15 @@ tools/make_icon.py        regenerate icon.png (no dependencies)
 ### Checks on the host
 
 ```bash
+pip install -r requirements-dev.txt        # ruff, mpy-cross, mpremote (pinned)
 python3 -m unittest discover -s tests -v   # protocol, wrapping, paging, repaint policy, framing
 ruff check .                               # Pimoroni's lint rules
-pip install mpy-cross && mpy-cross apps/claude_buddy/buddy_model.py   # syntax check
+find apps/claude_buddy -name '*.py' -print0 | xargs -0 -n1 python3 -m mpy_cross -o /dev/null   # MicroPython syntax
 npx --yes prettier@3.9.10 --check "**/*.md"   # Markdown formatting
 ```
+
+GitHub Actions runs the same checks on every pull request and every
+push to `main` (`.github/workflows/ci.yml`).
 
 Markdown is formatted with prettier (pinned version, settings in
 `.prettierrc.json`). A pre-commit hook blocks commits whose staged

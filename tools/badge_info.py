@@ -121,7 +121,7 @@ def latest_for(model):
         return None, "not a Claude Buddy target"
     try:
         return rel.fetch_release(model), None
-    except Exception as e:  # offline, rate-limited ...
+    except (OSError, ValueError) as e:  # offline, rate-limited, bad JSON ...
         return None, "couldn't reach GitHub ({})".format(e)
 
 
