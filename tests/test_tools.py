@@ -2,6 +2,7 @@
 tools/badge_info.py, tools/install.py). No badge or network needed."""
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -152,6 +153,23 @@ class EjectTest(unittest.TestCase):
         run = FakeRun({})
         self.assertFalse(install.eject(Path("E:\\"), run, "win32"))
         self.assertEqual(run.calls, [])
+
+
+class AppleDoubleTest(unittest.TestCase):
+    def test_removes_only_dot_underscore_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "assets").mkdir()
+            for name in ("main.py", "._main.py", "icon.png", "._icon.png", "assets/a.png", "assets/._a.png"):
+                (root / name).write_text("x")
+            self.assertEqual(install.remove_apple_double(root), 3)
+            left = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+            self.assertEqual(left, ["assets/a.png", "icon.png", "main.py"])
+
+    def test_nothing_to_remove(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "main.py").write_text("x")
+            self.assertEqual(install.remove_apple_double(tmp), 0)
 
 
 if __name__ == "__main__":
