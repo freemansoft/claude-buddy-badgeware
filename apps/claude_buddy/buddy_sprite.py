@@ -1,9 +1,16 @@
 """Lays out a buddy pose (from buddy_species) on a character grid.
 
-The art was drawn for the M5StickC's fixed 6x8 font, so every column
-has to line up. The badge fonts are proportional (an "i" is narrower
-than a "W"), so each character is drawn in its own cell, ``pitch``
-pixels wide and ``line_h`` high, centred in it.
+The art was drawn for the M5StickC's fixed 6x8 font. The badge fonts
+are proportional (an "i" is narrower than a "W"), so each character is
+drawn in its own cell, ``pitch`` pixels wide and ``line_h`` high,
+centred in it.
+
+Lines are laid out the way upstream draws a pet on the M5Stick's home
+screen (buddy.cpp, buddyPrintLine at 2x): each line trimmed of spaces
+and centred on the pose's middle. Upstream's padded columns (its 1x
+view) put narrow lines, such as the feet, too far left. Centring a
+line one character shorter than the widest moves it by half a cell,
+so columns here count **half cells**.
 
 Upstream animates each state and draws moving particles round the
 buddy (Zz, dots, "!", confetti). Nothing here moves: each state shows
@@ -17,8 +24,8 @@ The caller draws each cell with its own text function.
 from buddy_species import SPECIES, STATES
 
 # Still marks standing in for upstream's moving particles:
-# (side, row, text). "R" puts the text one column right of the widest
-# line, "L" one column left of the art; row 0 is the pose's top line.
+# (side, row, text). "R" puts the text one cell right of the widest
+# line, "L" one cell left of it; row 0 is the pose's top line.
 MARKS = {
     "sleep": (("R", 0, "Z"), ("R", 1, "z")),
     "idle": (),
@@ -34,29 +41,32 @@ def pose(species, state):
 
 
 def cells(species, state, marks=True):
-    """((col, row, char), ...), (cols, rows) for one pose.
+    """((half, row, char), ...), (width, rows) for one pose.
 
-    Columns are shifted so the leftmost character (art or mark) is in
-    column 0; blank cells are left out. ``cols`` x ``rows`` is the size
-    of the whole block, marks included, so callers can place it."""
-    lines = pose(species, state)
-    inked = [line for line in lines if line.strip()]
-    left = min(len(line) - len(line.lstrip()) for line in inked)
-    right = max(len(line) for line in inked)
-    out = [
-        (col, row, ch)
-        for row, line in enumerate(lines)
-        for col, ch in enumerate(line)
-        if ch != " "
-    ]
+    ``half`` is the character's column in half cells, counted from the
+    block's left edge (art or mark); blank cells are left out.
+    ``width`` is the block's width in half cells and ``rows`` its
+    height in lines, marks included, so callers can place it (see
+    width_px)."""
+    lines = [line.strip() for line in pose(species, state)]
+    widest = max(len(line) for line in lines)
+    out = []
+    for row, line in enumerate(lines):
+        start = widest - len(line)  # centred: (widest - len) / 2 cells
+        out.extend((start + 2 * i, row, ch) for i, ch in enumerate(line) if ch != " ")
     if marks:
         for side, row, text in MARKS[state]:
-            start = right + 1 if side == "R" else left - 1 - (len(text) - 1)
-            out.extend((start + i, row, ch) for i, ch in enumerate(text))
-    first = min(col for col, _row, _ch in out)
-    out = [(col - first, row, ch) for col, row, ch in out]
-    cols = max(col for col, _row, _ch in out) + 1
-    return out, (cols, len(lines))
+            start = 2 * (widest + 1) if side == "R" else -2 * (len(text) + 1)
+            out.extend((start + 2 * i, row, ch) for i, ch in enumerate(text))
+    first = min(half for half, _row, _ch in out)
+    out = [(half - first, row, ch) for half, row, ch in out]
+    width = max(half for half, _row, _ch in out) + 2
+    return out, (width, len(lines))
+
+
+def width_px(width, pitch):
+    """A width in half cells (from cells()) in whole pixels."""
+    return (width * pitch + 1) // 2
 
 
 def _whole(width):
@@ -79,10 +89,14 @@ def pitch_for(measure, chars=None):
 
 def place(grid, x, y, pitch, line_h, measure=None):
     """(char, x, y) for each cell of ``grid`` (from cells()) drawn with
-    its top-left corner at (x, y), in whole pixels. With ``measure``
-    each character is centred in its cell; without, it sits at the
-    cell's left edge."""
+    the block's top-left corner at (x, y), in whole pixels. With
+    ``measure`` each character is centred in its cell; without, it
+    sits at the cell's left edge."""
     return [
-        (ch, int(x + col * pitch + ((pitch - _whole(measure(ch))) // 2 if measure else 0)), int(y + row * line_h))
-        for col, row, ch in grid
+        (
+            ch,
+            int(x + (half * pitch) // 2 + ((pitch - _whole(measure(ch))) // 2 if measure else 0)),
+            int(y + row * line_h),
+        )
+        for half, row, ch in grid
     ]

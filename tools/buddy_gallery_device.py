@@ -30,7 +30,7 @@ gc.collect()
 print("GALLERY species table: {} bytes of RAM, {} free".format(_free - gc.mem_free(), gc.mem_free()))
 
 from buddy_profile import MONA, PROFILES  # noqa: E402
-from buddy_sprite import cells, pitch_for, place  # noqa: E402
+from buddy_sprite import cells, pitch_for, place, width_px  # noqa: E402
 from buddy_view import _color, _face, _markup_active, escape  # noqa: E402
 
 # Fonts to compare, smallest cell first (see the pitch table in
@@ -76,14 +76,18 @@ class Font:
             screen.text(self.esc(text), int(x), int(y))
 
 
+def _cell_w(name, f):
+    """Room for the widest of a species' poses in font ``f``."""
+    return width_px(max(cells(name, state)[1][0] for state in STATES), f.pitch) + GAP
+
+
 def pages(f):
     """[(species, [states])]: each species' poses, split into pages that
     fit the screen in font ``f``."""
     top = f.line_h + GAP
     out = []
     for name in NAMES:
-        cols = max(cells(name, state)[1][0] for state in STATES)
-        cell_w = cols * f.pitch + GAP
+        cell_w = _cell_w(name, f)
         cell_h = f.line_h + 5 * f.line_h + GAP  # label + pose
         per_row = max(1, (screen.width + GAP) // cell_w)
         per_page = per_row * max(1, (screen.height - top) // cell_h)
@@ -100,8 +104,7 @@ def draw(f, page, number, total):
     f.use()
     f.text("{} {}/{}  {} ({}x{})".format(name, number, total, f.name, f.pitch, f.line_h), 2, 0)
     colour = color.rgb(*SPECIES[name][0]) if not profile.eink else fg
-    cols = max(cells(name, state)[1][0] for state in STATES)
-    cell_w = cols * f.pitch + GAP
+    cell_w = _cell_w(name, f)
     per_row = max(1, (screen.width + GAP) // cell_w)
     for i, state in enumerate(states):
         x = (i % per_row) * cell_w

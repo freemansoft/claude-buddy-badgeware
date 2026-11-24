@@ -80,19 +80,27 @@ The art needs fixed columns, but the badge fonts are proportional (an
 its own cell, centred, as the M5Stick's fixed 6×8 font does upstream.
 The cell is as wide as the widest character the art uses.
 
-The ROM pixel fonts' widths, read from their `.ppf` glyph tables (to
-confirm on the badge, where the gallery measures them). The widest
-pose, marks included, is 17 columns by 5 rows:
+Each line is trimmed and centred on the pose's middle, the way
+upstream draws a pet on the M5Stick's home screen (at 2×). Upstream's
+smaller view keeps each line's padding instead, so the columns line up
+on the left. That was tried first, and on the Tufty the bottom line
+(feet, base, tail), usually the narrowest, sat too far left. Centring
+a line one character shorter than the widest moves it by half a cell.
 
-| Font      | Cell (px) | Widest pose (px) |
-| --------- | --------- | ---------------- |
-| `sins`    | 7 × 12    | 119 × 60         |
-| `teatime` | 7 × 12    | 119 × 60         |
-| `kobold`  | 7 × 12    | 119 × 60         |
-| `hungry`  | 7 × 15    | 119 × 75         |
-| `nope`    | 10 × 13   | 170 × 65         |
+The ROM pixel fonts' widths, read from their `.ppf` glyph tables. The
+gallery measures them on the badge, and they can differ: `sins`
+measured 8 px wide on the Tufty, not 7. The widest pose, marks
+included, is 18 cells by 5 rows:
 
-At 7 px cells a pet fits in a column about 120 px wide beside the text
+| Font      | Cell (px, from the file) | Widest pose (px) |
+| --------- | ------------------------ | ---------------- |
+| `sins`    | 7 × 12 (8 × 12 measured) | 126 × 60         |
+| `teatime` | 7 × 12                   | 126 × 60         |
+| `kobold`  | 7 × 12                   | 126 × 60         |
+| `hungry`  | 7 × 15                   | 126 × 75         |
+| `nope`    | 10 × 13                  | 180 × 65         |
+
+At 7 px cells a pet fits in a column about 130 px wide beside the text
 on the Badger's 264×176 screen. `nope`, the Badger's body font, is too
 wide for that. MonaSans (the Tufty's font) is measured by the gallery.
 
