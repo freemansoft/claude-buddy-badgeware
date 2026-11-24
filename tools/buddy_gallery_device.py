@@ -9,10 +9,12 @@ shows the buddy images on the real screen, to judge them by eye.
 
 Reads the images the app ships, /system/apps/claude_buddy/buddy_art/
 <model>_<state>.png, so install the app first. Prints a GALLERY line
-with each image's size and the RAM the five take.
+with each image's size and the RAM the five take. Only the Tufty has a
+buddy; on a Badger it says so and stops.
 """
 
 import gc
+import os
 import sys
 import time
 
@@ -39,13 +41,29 @@ title_pen = _color(profile.theme["title"])
 body_face = _face(profile.fonts[2])
 title_face = _face(profile.fonts[1])
 
-gc.collect()
-_free = gc.mem_free()
-art = {state: image.load("{}/buddy_art/{}_{}.png".format(APP_DIR, badge.model, state)) for state in STATES}
-gc.collect()
-size = art["idle"].width
-print("GALLERY {} images, {} x {} px, {} bytes of RAM".format(
-    len(art), size, art["idle"].height, _free - gc.mem_free()))
+
+def _has_art():
+    try:
+        os.stat("{}/buddy_art/{}_idle.png".format(APP_DIR, badge.model))
+        return True
+    except OSError:
+        return False
+
+
+art = {}
+size = 0
+
+
+def load_art():
+    global size
+    gc.collect()
+    free = gc.mem_free()
+    for state in STATES:
+        art[state] = image.load("{}/buddy_art/{}_{}.png".format(APP_DIR, badge.model, state))
+    gc.collect()
+    size = art["idle"].width
+    print("GALLERY {} images, {} x {} px, {} bytes of RAM".format(
+        len(art), size, art["idle"].height, free - gc.mem_free()))
 
 
 def text(face, s, x, y):
@@ -98,6 +116,10 @@ def draw(page):
 
 
 def main():
+    if not _has_art():
+        print("GALLERY no buddy pictures for the {} (only the Tufty has a buddy)".format(badge.model))
+        return
+    load_art()
     page = 0
     pages = 1 + len(STATES)
     draw(page)

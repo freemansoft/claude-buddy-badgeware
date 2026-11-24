@@ -1,13 +1,14 @@
 # The buddy character
 
-A small orange blob that shows what Claude is doing: one still picture
-per state. Anthropic's reference device shows an animated pet; this is
-the badge's own take on that.
+A small orange blob on the Tufty that shows what Claude is doing: one
+still picture per state. Anthropic's reference device shows an
+animated pet; this is the badge's own take on that. **The Badger has
+no buddy** (see [Not on the Badger](#not-on-the-badger)).
 
-**Status:** the pictures are drawn and can be viewed on a badge with a
+**Status:** the pictures are drawn and can be viewed on a Tufty with a
 gallery tool, but the app doesn't show them yet: nothing on its
 screens has changed. Viewed on a Tufty 2350 on 2026-11-23 (see
-[Results](#results)); not yet on a Badger.
+[Results](#results)).
 
 ## The character
 
@@ -32,45 +33,51 @@ so those aren't drawn.
 
 `tools/make_buddy_art.py` draws them from simple shapes (squircles,
 ellipses, lines, polygons) with the standard library and writes
-`apps/claude_buddy/buddy_art/<badge>_<state>.png`. Change a shape,
+`apps/claude_buddy/buddy_art/tufty_<state>.png`. Change a shape,
 colour or size there and run it again; `--sheet DIR` also writes
 preview sheets, and `--check` (and a unit test) fails if the PNGs are
 out of date.
 
-| Badge  | Size  | Colours                                          | RAM per image |
-| ------ | ----- | ------------------------------------------------ | ------------- |
-| Tufty  | 96 px | orange body, dark face, white marks; antialiased | about 37 KB   |
-| Badger | 72 px | outlined: white body, black edge, face and marks | about 21 KB   |
+They are 96 px square: an orange body, a dark face and white marks,
+antialiased, on a transparent background. The files are about 1 KB
+each, but each takes about 37 KB of RAM once decoded, so the app
+should load only the picture it is showing.
 
-On the Badger the buddy is outlined: pure black and white, for the
-e-ink, with a thick black edge round a white body. A solid black body
-with only white eyes showing was tried first, and dropped because it
-read as a figure painted black, which could offend.
+The size was chosen on the Tufty: 128 px looked too big beside the
+text, and half that too small.
 
-Backgrounds are transparent, so the pictures sit on either badge's
-background. The files are small (0.3–1.3 KB each); the RAM is the
-decoded image, so the app should load only the picture it is showing.
+## Not on the Badger
 
-Sizes were chosen on the Tufty: 128 px looked too big beside the text,
-and half that too small. The Badger's 72 px matches by eye (its
-pixels are larger) but hasn't been seen on a Badger yet.
+The Badger's e-ink gets no buddy. Decided on 2026-11-23, after trying
+two black-and-white versions at 72 px (previewed on the Mac, never on
+a Badger):
 
-## Viewing them on a badge
+- **Solid black body, white face:** read as a figure painted black
+  with only its eyes showing, which could offend.
+- **Outlined, white body with a black edge:** with no antialiasing,
+  thin lines broke up; thickened, they pushed into the marks above the
+  head and cut the party hat apart. It never looked as good as the
+  colour version.
+
+The Badger keeps its text-only screens. Reopening this is a new
+decision, not a bug fix.
+
+## Viewing them on a Tufty
 
 1. Install the app as usual (`python3 tools/install.py`, see the
    README). The pictures go with it; the app doesn't use them yet.
-2. With the badge back in normal mode, run:
+2. With the Tufty back in normal mode, run:
 
    ```bash
    python3 tools/buddy_gallery.py
    ```
 
-   It stops whatever the badge was running and shows:
+   It stops whatever the Tufty was running and shows:
    - **page 1:** all five states side by side, at half size;
    - **pages 2–6:** each state at full size on the right, beside a
      title and sample text, roughly as the app would lay it out.
 
-   **DOWN** / **UP** turn pages and **C** stops; the badge then
+   **DOWN** / **UP** turn pages and **C** stops; the Tufty then
    restarts. The terminal shows the pictures' size and RAM.
 
 ## Results
@@ -79,8 +86,6 @@ pixels are larger) but hasn't been seen on a Badger yet.
 right beside the text, and the states read clearly. Two rounds of
 changes came from seeing them on the screen: smaller (from 128 px) and
 bigger feet.
-
-**Badger 2350:** not yet viewed.
 
 ## Why not claude-desktop-buddy's ASCII pets
 
@@ -103,9 +108,10 @@ The work is in closed pull request #19.
 
 ## Next: showing the buddy in the app
 
-Planned, not built. The buddy would sit on the right of the body on
-connected screens, its state taken from what the screen already
-shows, so it adds **no e-ink refreshes**:
+Planned, not built, and on the Tufty only (a profile setting, so the
+Badger's profile has none). The buddy would sit on the right of the
+body on connected screens, its state taken from what the screen
+already shows, so it adds no repaints of its own:
 
 | Screen                                    | State     |
 | ----------------------------------------- | --------- |
@@ -120,4 +126,4 @@ shows, so it adds **no e-ink refreshes**:
 Busy starts at 1 running session, because the title already changes
 from "Idle" to "Working" there and the counts are part of the screen's
 change key. Text beside the buddy wraps in the narrower space left.
-Nothing animates, on either badge.
+Nothing animates.

@@ -16,10 +16,9 @@ buddy takes the same room on screen whatever it's doing:
     attention  wide eyes, small "o" mouth, "!?" above
     celebrate  happy "^ ^" eyes, open grin, a party hat and confetti
 
-Each badge gets its own set (BADGES): the Tufty a 96 px colour blob,
-the Badger a 72 px outlined one in pure black and white for its
-e-ink. Pixels outside the blob are transparent, so the images sit on
-either background.
+Only the Tufty has a buddy: a 96 px colour blob (BADGES). The Badger's
+e-ink has none; see docs/buddies.md for why. Pixels outside the blob
+are transparent, so the images sit on the screen's background.
 
 Shapes are described on a 0..1 canvas and rasterised with 4x4
 supersampling. Standard library only (zlib + struct), like
@@ -38,31 +37,16 @@ OUT = ROOT / "apps" / "claude_buddy" / "buddy_art"
 STATES = ("sleep", "idle", "busy", "attention", "celebrate")
 SS = 4  # supersampling per axis
 
-# Per badge: image size in pixels, whether to reduce to pure black and
-# white (the Badger's e-ink), and a colour per shape role.
+# Per badge with a buddy: image size in pixels and a colour per shape
+# role. The Badger has none (docs/buddies.md).
 BADGES = {
     "tufty": {
         "size": 96,
-        "mono": False,
         "colours": {
             "body": (217, 119, 87),  # Claude orange, as the Tufty theme's titles
             "face": (40, 24, 20),
             "mark": (255, 255, 255),
             "hole": None,  # see-through: the background shows
-        },
-    },
-    "badger": {
-        "size": 72,
-        "mono": True,
-        # An outlined character: a white body with a thick black edge
-        # and a black face. A solid black body with only white eyes
-        # showing read as a figure painted black, which could offend.
-        "outline": ((0, 0, 0), 0.035),
-        "colours": {
-            "body": (255, 255, 255),
-            "face": (0, 0, 0),
-            "mark": (0, 0, 0),
-            "hole": None,
         },
     },
 }
@@ -241,30 +225,11 @@ def scene(state):
 # -- raster and PNG ------------------------------------------------------------------
 
 
-def _outline(shapes, colour, width):
-    """An edge ``width`` wide round the body's silhouette (body and feet
-    together), to draw behind everything: each body shape grown by
-    testing points on circles round the sample point."""
-    offsets = [(r * math.cos(a * math.pi / 8), r * math.sin(a * math.pi / 8))
-               for r in (width, width / 2) for a in range(16)]
-    out = []
-    for role, (x0, y0, x1, y1), inside in shapes:
-        if role != "body":
-            continue
-
-        def grown(x, y, inside=inside):
-            return any(inside(x + dx, y + dy) for dx, dy in offsets)
-
-        out.append((colour, (x0 - width, y0 - width, x1 + width, y1 + width), grown))
-    return out
-
-
 def render(state, badge):
     """Rows of (r, g, b, a) for ``state`` on ``badge``."""
     spec = BADGES[badge]
     size, colours = spec["size"], spec["colours"]
     shapes = scene(state)
-    edge = _outline(shapes, *spec["outline"]) if spec.get("outline") else []
     n = size * SS
     rows = []
     for py in range(size):
@@ -277,10 +242,6 @@ def render(state, badge):
                 for sx in range(SS):
                     x = (px * SS + sx + 0.5) / n
                     colour = None
-                    for edge_colour, (x0, y0, x1, y1), inside in edge:
-                        if x0 <= x <= x1 and y0 <= y <= y1 and inside(x, y):
-                            colour = edge_colour
-                            break
                     for role, (x0, y0, x1, y1), inside in shapes:
                         if x0 <= x <= x1 and y0 <= y <= y1 and inside(x, y):
                             colour = colours[role]
@@ -291,10 +252,6 @@ def render(state, badge):
             alpha = covered / (SS * SS)
             if not covered:
                 row.append((0, 0, 0, 0))
-            elif spec["mono"]:
-                grey = sum(rgb) / (3 * covered)
-                ink = 0 if grey < 128 else 255
-                row.append((ink, ink, ink, 255) if alpha >= 0.5 else (0, 0, 0, 0))
             else:
                 row.append(tuple(int(v / covered) for v in rgb) + (int(alpha * 255 + 0.5),))
         rows.append(row)
@@ -367,7 +324,7 @@ def main():
     if args.sheet:
         folder = Path(args.sheet)
         folder.mkdir(parents=True, exist_ok=True)
-        for badge, background in (("tufty", (0, 0, 0)), ("badger", (255, 255, 255))):
+        for badge, background in (("tufty", (0, 0, 0)),):
             images = [render(state, badge) for state in STATES]
             (folder / "sheet_{}.png".format(badge)).write_bytes(png(sheet(images, background)))
         print("Wrote preview sheets to", folder)

@@ -54,7 +54,7 @@ class DeviceScriptTest(unittest.TestCase):
         install_badgeware_stubs()
         if model == "tufty":
             builtins.screen.width, builtins.screen.height = 320, 240
-        size = make_buddy_art.BADGES[model]["size"]
+        size = make_buddy_art.BADGES.get(model, {}).get("size", 0)
         loaded, blits, updates = [], [], []
 
         def load(path):
@@ -63,6 +63,13 @@ class DeviceScriptTest(unittest.TestCase):
 
         builtins.screen.blit = lambda img, *where: blits.append((img.path, where))
         builtins.image.load = load
+        has_art = model in make_buddy_art.BADGES
+
+        def stat(_path):
+            if not has_art:
+                raise OSError(2, "no such file")
+            return (0,) * 10
+
         stubs = {name: name for name in BUTTONS}
         stubs.update(
             badge=FakeBadge(model, presses),
@@ -76,6 +83,7 @@ class DeviceScriptTest(unittest.TestCase):
             mock.patch.dict(sys.modules, {"badgeware": types.ModuleType("badgeware")}),
             mock.patch.object(gc, "mem_free", lambda: 100000, create=True),
             mock.patch.object(time, "sleep_ms", lambda _ms: None, create=True),
+            mock.patch("os.stat", stat),
         ]
         for p in patches:
             p.start()
@@ -83,11 +91,15 @@ class DeviceScriptTest(unittest.TestCase):
         runpy.run_path(str(buddy_gallery.DEVICE_SCRIPT), run_name="__main__")
         return loaded, blits, updates
 
-    def test_loads_this_badges_images(self):
-        for model in ("badger", "tufty"):
-            loaded, _blits, _updates = self.run_gallery(model, [])
-            self.assertEqual(loaded, ["/system/apps/claude_buddy/buddy_art/{}_{}.png".format(model, state)
-                                      for state in make_buddy_art.STATES])
+    def test_loads_the_tufty_images(self):
+        loaded, _blits, _updates = self.run_gallery("tufty", [])
+        self.assertEqual(loaded, ["/system/apps/claude_buddy/buddy_art/tufty_{}.png".format(state)
+                                  for state in make_buddy_art.STATES])
+
+    def test_stops_on_a_badger(self):
+        # Only the Tufty has a buddy: nothing is loaded or drawn.
+        loaded, blits, updates = self.run_gallery("badger", ["BUTTON_DOWN"])
+        self.assertEqual((loaded, blits, updates), ([], [], []))
 
     def test_overview_then_each_state(self):
         _loaded, blits, updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * 5 + [None, "BUTTON_UP"])
@@ -101,15 +113,15 @@ class DeviceScriptTest(unittest.TestCase):
         self.assertTrue(blits[10][0].endswith("tufty_attention.png"))  # UP goes back one
 
     def test_every_page_fits_the_screen(self):
-        for model, (w, h) in (("badger", (264, 176)), ("tufty", (320, 240))):
-            size = make_buddy_art.BADGES[model]["size"]
-            _loaded, blits, _updates = self.run_gallery(model, ["BUTTON_DOWN"] * 5)
-            for _path, where in blits[:5]:  # the overview's thumbnails
-                _tag, x, y, tw, th = where[1]
-                self.assertTrue(0 < x and x + tw < w and 0 <= y and y + th <= h, (model, where))
-            for _path, where in blits[5:]:  # full size
-                _tag, x, y = where[0]
-                self.assertTrue(0 <= x and x + size <= w and 0 <= y and y + size <= h, (model, where))
+        w, h = 320, 240
+        size = make_buddy_art.BADGES["tufty"]["size"]
+        _loaded, blits, _updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * 5)
+        for _path, where in blits[:5]:  # the overview's thumbnails
+            _tag, x, y, tw, th = where[1]
+            self.assertTrue(0 < x and x + tw < w and 0 <= y and y + th <= h, where)
+        for _path, where in blits[5:]:  # full size
+            _tag, x, y = where[0]
+            self.assertTrue(0 <= x and x + size <= w and 0 <= y and y + size <= h, where)
 
 
 if __name__ == "__main__":

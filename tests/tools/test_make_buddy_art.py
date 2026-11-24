@@ -43,11 +43,11 @@ class ArtTest(unittest.TestCase):
             widths = {state: ink_columns(decode(self.files[art.filename(badge, state)])) for state in art.STATES}
             self.assertEqual(len(set(widths.values())), 1, (badge, widths))
 
-    def test_badger_images_are_pure_black_and_white(self):
-        for state in art.STATES:
-            rows = decode(self.files[art.filename("badger", state)])
-            pixels = {p for row in rows for p in row}
-            self.assertLessEqual(pixels, {(0, 0, 0, 0), (0, 0, 0, 255), (255, 255, 255, 255)}, state)
+    def test_only_the_tufty_has_a_buddy(self):
+        # The Badger's e-ink has none (docs/buddies.md).
+        self.assertEqual(list(art.BADGES), ["tufty"])
+        self.assertEqual(sorted(p.name for p in art.OUT.iterdir()),
+                         sorted(art.filename("tufty", state) for state in art.STATES))
 
     def test_background_is_transparent(self):
         for name, data in self.files.items():
