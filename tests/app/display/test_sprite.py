@@ -60,8 +60,16 @@ class PitchTest(unittest.TestCase):
         widths = {"@": 9, "W": 8}
         self.assertEqual(sprite.pitch_for(lambda ch: widths.get(ch, 5)), 9)
 
+    def test_float_widths_round_up_to_whole_pixels(self):
+        # The firmware's measure_text returns floats (seen: 8.0 on a Tufty).
+        pitch = sprite.pitch_for(lambda ch: 7.25 if ch == "@" else 6.0)
+        self.assertEqual((pitch, type(pitch)), (8, int))
+        placed = sprite.place([(1, 1, "i")], 0, 0, pitch, 12, lambda _ch: 3.0)
+        self.assertEqual(placed, [("i", 10, 12)])
+        self.assertTrue(all(type(v) is int for _ch, x, y in placed for v in (x, y)))
+
     def test_marks_count(self):
-        # "Z" is only in the marks for some fonts' purposes; it must count.
+        # Characters only the marks use (here "Z") must count too.
         self.assertEqual(sprite.pitch_for(lambda ch: 12 if ch == "Z" else 4, chars="ab"), 12)
 
 

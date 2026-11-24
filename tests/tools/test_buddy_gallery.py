@@ -22,6 +22,14 @@ import buddy_species
 BUTTONS = ("BUTTON_A", "BUTTON_B", "BUTTON_C", "BUTTON_UP", "BUTTON_DOWN")
 
 
+class FloatScreen(FakeScreen):
+    """Measures in floats, as the firmware does (8.0, not 8)."""
+
+    def measure_text(self, text, font_size=0):
+        w, h = super().measure_text(text, font_size)
+        return (float(w), h)
+
+
 class FakeBadge:
     """Presses ``presses`` one per poll (None for a poll with nothing
     pressed)."""
@@ -63,7 +71,7 @@ class DeviceScriptTest(unittest.TestCase):
             FAST_UPDATE=3 << 4, NON_BLOCKING=1 << 9, HIRES=1,
         )
         if model == "tufty":
-            builtins.screen = FakeScreen()
+            builtins.screen = FloatScreen()
             builtins.screen.width, builtins.screen.height = 320, 240
         patches = [mock.patch.object(builtins, name, value, create=True) for name, value in stubs.items()]
         patches += [

@@ -59,20 +59,30 @@ def cells(species, state, marks=True):
     return out, (cols, len(lines))
 
 
+def _whole(width):
+    """A measured width as whole pixels, rounded up: the firmware's
+    measure_text returns floats (8.0), and MicroPython's range and
+    integer layout need ints."""
+    whole = int(width)
+    return whole + 1 if width > whole else whole
+
+
 def pitch_for(measure, chars=None):
-    """The cell width that fits every character the art uses:
-    ``measure(ch)`` is a character's width in the current font."""
+    """The cell width, in whole pixels, that fits every character the
+    art uses: ``measure(ch)`` is a character's width in the current
+    font."""
     if chars is None:
         chars = {ch for _colour, poses in SPECIES.values() for p in poses for ch in p} - {" ", "\n"}
     chars = set(chars) | {ch for marks in MARKS.values() for _side, _row, text in marks for ch in text}
-    return max(measure(ch) for ch in chars)
+    return max(_whole(measure(ch)) for ch in chars)
 
 
 def place(grid, x, y, pitch, line_h, measure=None):
     """(char, x, y) for each cell of ``grid`` (from cells()) drawn with
-    its top-left corner at (x, y). With ``measure`` each character is
-    centred in its cell; without, it sits at the cell's left edge."""
+    its top-left corner at (x, y), in whole pixels. With ``measure``
+    each character is centred in its cell; without, it sits at the
+    cell's left edge."""
     return [
-        (ch, x + col * pitch + ((pitch - measure(ch)) // 2 if measure else 0), y + row * line_h)
+        (ch, int(x + col * pitch + ((pitch - _whole(measure(ch))) // 2 if measure else 0)), int(y + row * line_h))
         for col, row, ch in grid
     ]
