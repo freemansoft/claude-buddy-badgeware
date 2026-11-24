@@ -77,6 +77,7 @@ so the two can't drift apart.
 | Power: consumers, USB power vs battery, power constants     | `docs/power.md`                                              |
 | Badger (e-ink) vs Tufty (LCD) display differences           | `docs/devices.md`                                            |
 | Badger vs Tufty firmware facts, with `vendor/` citations    | `badgeware-platforms` skill                                  |
+| The buddy character: pictures, sizes, plan                  | `docs/buddies.md`                                            |
 | How Claude should change code / protocol / docs             | `.claude/skills/`                                            |
 | Development setup and commands, in brief                    | `CLAUDE.md` (the README's "Development" in full)             |
 

@@ -17,9 +17,9 @@ buddy takes the same room on screen whatever it's doing:
     celebrate  happy "^ ^" eyes, open grin, a party hat and confetti
 
 Each badge gets its own set (BADGES): the Tufty a 96 px colour blob,
-the Badger a 72 px pure black-and-white one for its e-ink. Pixels
-outside the blob are transparent, so the images sit on either
-background.
+the Badger a 72 px outlined one in pure black and white for its
+e-ink. Pixels outside the blob are transparent, so the images sit on
+either background.
 
 Shapes are described on a 0..1 canvas and rasterised with 4x4
 supersampling. Standard library only (zlib + struct), like
@@ -54,9 +54,13 @@ BADGES = {
     "badger": {
         "size": 72,
         "mono": True,
+        # An outlined character: a white body with a thick black edge
+        # and a black face. A solid black body with only white eyes
+        # showing read as a figure painted black, which could offend.
+        "outline": ((0, 0, 0), 0.035),
         "colours": {
-            "body": (0, 0, 0),
-            "face": (255, 255, 255),
+            "body": (255, 255, 255),
+            "face": (0, 0, 0),
             "mark": (0, 0, 0),
             "hole": None,
         },
@@ -237,11 +241,30 @@ def scene(state):
 # -- raster and PNG ------------------------------------------------------------------
 
 
+def _outline(shapes, colour, width):
+    """An edge ``width`` wide round the body's silhouette (body and feet
+    together), to draw behind everything: each body shape grown by
+    testing points on circles round the sample point."""
+    offsets = [(r * math.cos(a * math.pi / 8), r * math.sin(a * math.pi / 8))
+               for r in (width, width / 2) for a in range(16)]
+    out = []
+    for role, (x0, y0, x1, y1), inside in shapes:
+        if role != "body":
+            continue
+
+        def grown(x, y, inside=inside):
+            return any(inside(x + dx, y + dy) for dx, dy in offsets)
+
+        out.append((colour, (x0 - width, y0 - width, x1 + width, y1 + width), grown))
+    return out
+
+
 def render(state, badge):
     """Rows of (r, g, b, a) for ``state`` on ``badge``."""
     spec = BADGES[badge]
     size, colours = spec["size"], spec["colours"]
     shapes = scene(state)
+    edge = _outline(shapes, *spec["outline"]) if spec.get("outline") else []
     n = size * SS
     rows = []
     for py in range(size):
@@ -254,6 +277,10 @@ def render(state, badge):
                 for sx in range(SS):
                     x = (px * SS + sx + 0.5) / n
                     colour = None
+                    for edge_colour, (x0, y0, x1, y1), inside in edge:
+                        if x0 <= x <= x1 and y0 <= y <= y1 and inside(x, y):
+                            colour = edge_colour
+                            break
                     for role, (x0, y0, x1, y1), inside in shapes:
                         if x0 <= x <= x1 and y0 <= y <= y1 and inside(x, y):
                             colour = colours[role]
