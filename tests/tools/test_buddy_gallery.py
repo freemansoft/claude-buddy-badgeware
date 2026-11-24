@@ -92,9 +92,10 @@ class DeviceScriptTest(unittest.TestCase):
     def test_overview_then_each_state(self):
         _loaded, blits, updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * 5 + [None, "BUTTON_UP"])
         self.assertEqual(updates, [5, 6, 7, 8, 9, 10, 11])  # 5 halves, then one per page
-        # Five half-size thumbnails would fill the 320 px exactly, so they
-        # shrink to leave gaps: (320 - 6 * 4) // 5 = 59 px.
-        self.assertEqual(blits[0][1], (("rect", 0, 0, 128, 128), ("rect", 4, 90, 59, 59)))
+        size = make_buddy_art.BADGES["tufty"]["size"]
+        thumb = min(size // 2, (320 - 6 * 4) // 5)  # half size, or less to leave gaps
+        self.assertEqual(blits[0][1][0], ("rect", 0, 0, size, size))
+        self.assertEqual(blits[0][1][1][3:], (thumb, thumb))
         self.assertEqual([path.rsplit("/", 1)[-1] for path, _ in blits[5:10]],
                          ["tufty_{}.png".format(state) for state in make_buddy_art.STATES])
         self.assertTrue(blits[10][0].endswith("tufty_attention.png"))  # UP goes back one

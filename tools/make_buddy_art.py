@@ -16,8 +16,8 @@ buddy takes the same room on screen whatever it's doing:
     attention  wide eyes, small "o" mouth, "!?" above
     celebrate  happy "^ ^" eyes, open grin, a party hat and confetti
 
-Each badge gets its own set (BADGES): the Tufty a 128 px colour blob,
-the Badger a 96 px pure black-and-white one for its e-ink. Pixels
+Each badge gets its own set (BADGES): the Tufty a 96 px colour blob,
+the Badger a 72 px pure black-and-white one for its e-ink. Pixels
 outside the blob are transparent, so the images sit on either
 background.
 
@@ -42,7 +42,7 @@ SS = 4  # supersampling per axis
 # white (the Badger's e-ink), and a colour per shape role.
 BADGES = {
     "tufty": {
-        "size": 128,
+        "size": 96,
         "mono": False,
         "colours": {
             "body": (217, 119, 87),  # Claude orange, as the Tufty theme's titles
@@ -52,7 +52,7 @@ BADGES = {
         },
     },
     "badger": {
-        "size": 96,
+        "size": 72,
         "mono": True,
         "colours": {
             "body": (0, 0, 0),
