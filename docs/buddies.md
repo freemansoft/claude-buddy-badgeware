@@ -6,9 +6,9 @@ animated pet; this is the badge's own take on that. **The Badger has
 no buddy** (see [Not on the Badger](#not-on-the-badger)).
 
 **Status:** the app shows the buddy on the Tufty's connected screens
-(see [In the app](#in-the-app)). The pictures were checked on a Tufty
-2350 with the gallery tool on 2026-11-23 (see [Results](#results));
-the app with the buddy hasn't been run on a Tufty yet.
+(see [In the app](#in-the-app)). It was checked on a Tufty 2350: the
+pictures with the gallery tool on 2026-11-23, the app on 2026-11-24
+(see [Results](#results)).
 
 ## The character
 
@@ -98,8 +98,13 @@ right beside the text, and the states read clearly. Two rounds of
 changes came from seeing them on the screen: smaller (from 128 px) and
 bigger feet.
 
-The denied picture was added on 2026-11-24 and approved from a preview
-sheet on the Mac; it hasn't been seen on a Tufty yet.
+**Tufty 2350, 2026-11-24**, the app connected to Claude Desktop: the
+buddy and the text beside it look right. The denied picture was added
+that day, approved from a preview sheet on the Mac, then installed
+with the app.
+
+Not measured: whether loading a picture when the state changes adds a
+noticeable delay or any power draw.
 
 ## Why not claude-desktop-buddy's ASCII pets
 
