@@ -1,1 +1,2 @@
 sim/wasm/** linguist-vendored
+apps/claude_buddy/buddy_species.py linguist-generated

@@ -4,3 +4,6 @@
 [submodule "vendor/tufty2350"]
 	path = vendor/tufty2350
 	url = https://github.com/pimoroni/tufty2350
+[submodule "vendor/claude-desktop-buddy"]
+	path = vendor/claude-desktop-buddy
+	url = https://github.com/anthropics/claude-desktop-buddy

@@ -9,8 +9,8 @@ runs on both, with a profile per badge in `buddy_profile.py`. See
 ## Development
 
 Set up once per clone (the submodules are Pimoroni's firmware source,
-pinned to `v3.1.1`; the venv holds the pinned ruff, mpy-cross and
-mpremote):
+pinned to `v3.1.1`, and Anthropic's claude-desktop-buddy at `a280c64`;
+the venv holds the pinned ruff, mpy-cross and mpremote):
 
 ```bash
 git submodule update --init
@@ -46,8 +46,12 @@ git ls-files -z '*.md' | xargs -0 npx --yes prettier@$(cat .prettier-version) --
   tests and Markdown checks on every PR and push to `main`
 - Tools run as scripts from the repository root
   (`python3 tools/badge_info.py`, `tools/install.py`,
-  `tools/badge_check.py files`, `tools/flash_firmware.py`). They need
-  `mpremote` on `PATH`
+  `tools/badge_check.py files`, `tools/flash_firmware.py`,
+  `tools/buddy_gallery.py`). They need `mpremote` on `PATH`
+- `apps/claude_buddy/buddy_species.py` is generated from the
+  `vendor/claude-desktop-buddy` submodule by `tools/import_buddies.py`;
+  don't edit it by hand. Its MIT licence (Anthropic's) ships next to it
+  and must stay (see `docs/buddies.md`)
 - No simulator: the app lives on Bluetooth, which the Badgeware
   simulators don't have. Host tests, then a real badge
 - Project skills: `buddy-change` (any change under `apps/claude_buddy/`:
