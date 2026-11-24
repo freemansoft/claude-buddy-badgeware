@@ -59,7 +59,12 @@ a Badger):
   head and cut the party hat apart. It never looked as good as the
   colour version.
 
-The Badger keeps its text-only screens. Reopening this is a new
+The Badger keeps its text-only screens, and this work must leave it
+**unchanged**: its screens, layout, refreshes and power behaviour.
+The only Badger-side changes allowed are in files both badges share
+(for example a profile field the Badger sets to "no buddy"). The
+Tufty's pictures are copied onto a Badger with the rest of the app
+folder (about 5 KB) but never read there. Reopening this is a new
 decision, not a bug fix.
 
 ## Viewing them on a Tufty
