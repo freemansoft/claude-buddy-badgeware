@@ -9,7 +9,7 @@ buddy_art/, and have the badge in normal mode (menu or an app on
 screen). This runs tools/buddy_gallery_device.py on the badge over
 mpremote:
 
-    DOWN / UP   next / previous page (all five states, then each one)
+    DOWN / UP   next / previous page (all six states, then each one)
     C           stop
 
 The badge then restarts (machine.reset()). Like tools/badge_info.py it

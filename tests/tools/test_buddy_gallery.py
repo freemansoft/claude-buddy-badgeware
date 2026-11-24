@@ -102,27 +102,28 @@ class DeviceScriptTest(unittest.TestCase):
         self.assertEqual((loaded, blits, updates), ([], [], []))
 
     def test_overview_then_each_state(self):
-        _loaded, blits, updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * 5 + [None, "BUTTON_UP"])
-        self.assertEqual(updates, [5, 6, 7, 8, 9, 10, 11])  # 5 halves, then one per page
+        n = len(make_buddy_art.STATES)
+        _loaded, blits, updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * n + [None, "BUTTON_UP"])
+        self.assertEqual(updates, list(range(n, 2 * n + 2)))  # n thumbnails, then one per page
         size = make_buddy_art.BADGES["tufty"]["size"]
-        thumb = min(size // 2, (320 - 6 * 4) // 5)  # half size, or less to leave gaps
+        thumb = min(size // 2, (320 - (n + 1) * 4) // n)  # half size, or less to leave gaps
         self.assertEqual(blits[0][1][0], ("rect", 0, 0, size, size))
         self.assertEqual(blits[0][1][1][3:], (thumb, thumb))
-        self.assertEqual([path.rsplit("/", 1)[-1] for path, _ in blits[5:10]],
+        self.assertEqual([path.rsplit("/", 1)[-1] for path, _ in blits[n:2 * n]],
                          ["tufty_{}.png".format(state) for state in make_buddy_art.STATES])
-        self.assertTrue(blits[10][0].endswith("tufty_attention.png"))  # UP goes back one
+        self.assertTrue(blits[-1][0].endswith(make_buddy_art.filename("tufty", make_buddy_art.STATES[-2])))  # UP goes back one
 
     def test_every_page_fits_the_screen(self):
         w, h = 320, 240
+        n = len(make_buddy_art.STATES)
         size = make_buddy_art.BADGES["tufty"]["size"]
-        _loaded, blits, _updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * 5)
-        for _path, where in blits[:5]:  # the overview's thumbnails
+        _loaded, blits, _updates = self.run_gallery("tufty", ["BUTTON_DOWN"] * (n - 1))
+        for _path, where in blits[:n]:  # the overview's thumbnails
             _tag, x, y, tw, th = where[1]
             self.assertTrue(0 < x and x + tw < w and 0 <= y and y + th <= h, where)
-        for _path, where in blits[5:]:  # full size
+        for _path, where in blits[n:]:  # full size
             _tag, x, y = where[0]
             self.assertTrue(0 <= x and x + size <= w and 0 <= y and y + size <= h, where)
-
 
 if __name__ == "__main__":
     unittest.main()

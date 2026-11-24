@@ -15,6 +15,7 @@ buddy takes the same room on screen whatever it's doing:
     busy       glancing up at two meshing gears, mouth to one side
     attention  wide eyes, small "o" mouth, "!?" above
     celebrate  happy "^ ^" eyes, open grin, a party hat and confetti
+    denied     flat eyes, straight mouth, an "x" above: noted, not sad
 
 Only the Tufty has a buddy: a 96 px colour blob (BADGES). The Badger's
 e-ink has none; see docs/buddies.md for why. Pixels outside the blob
@@ -34,7 +35,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "apps" / "claude_buddy" / "buddy_art"
-STATES = ("sleep", "idle", "busy", "attention", "celebrate")
+STATES = ("sleep", "idle", "busy", "attention", "celebrate", "denied")
 SS = 4  # supersampling per axis
 
 # Per badge with a buddy: image size in pixels and a colour per shape
@@ -140,6 +141,12 @@ def letter_z(role, x, y, w, r):
     return polyline(role, [(x, y), (x + w, y), (x, y + w), (x + w, y + w)], r)
 
 
+def cross(role, cx, cy, s, r):
+    """An "x" ``2 * s`` across, centred on (cx, cy)."""
+    return (polyline(role, [(cx - s, cy - s), (cx + s, cy + s)], r)
+            + polyline(role, [(cx - s, cy + s), (cx + s, cy - s)], r))
+
+
 def bang(role, cx, top, h, r):
     """A "!" ``h`` tall from ``top``."""
     return polyline(role, [(cx, top + r), (cx, top + h * 0.66)], r * 1.15) + [
@@ -217,6 +224,13 @@ def scene(state):
         s += polyline("face", [(0.34, 0.62), (0.40, 0.55), (0.46, 0.62)], 0.02)
         s += polyline("face", [(0.54, 0.62), (0.60, 0.55), (0.66, 0.62)], 0.02)
         s += [grin(0.5, 0.69, 0.08)]
+    elif state == "denied":
+        # Neutral, not sad: denying is often the right call.
+        s += body(**BODY)
+        s += polyline("face", [(0.35, 0.60), (0.45, 0.60)], 0.022)
+        s += polyline("face", [(0.55, 0.60), (0.65, 0.60)], 0.022)
+        s += polyline("face", [(0.44, 0.71), (0.56, 0.71)], 0.016)
+        s += cross("mark", 0.5, 0.19, 0.09, 0.03)
     else:
         raise ValueError("unknown state: {}".format(state))
     return s

@@ -206,8 +206,8 @@ read comfortably.
 Nothing on screen moves. On the Tufty, a buddy character, an orange
 blob, sits on the right of connected screens: asleep with no sessions,
 idle, busy with gears while Claude works, `!?` when a prompt is
-waiting, and a party hat when you allow one. One still picture per
-state; see [docs/buddies.md](docs/buddies.md). The Badger has no
+waiting, a party hat when you allow one and an "x" when you deny
+one. One still picture per state; see [docs/buddies.md](docs/buddies.md). The Badger has no
 buddy.
 
 ## Buttons

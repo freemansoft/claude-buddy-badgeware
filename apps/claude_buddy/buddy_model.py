@@ -122,6 +122,7 @@ MOOD_IDLE = "idle"
 MOOD_BUSY = "busy"
 MOOD_ATTENTION = "attention"
 MOOD_CELEBRATE = "celebrate"
+MOOD_DENIED = "denied"
 
 _TOOL_SUMMARY_KEYS = (
     "command",
@@ -739,7 +740,7 @@ class BuddyModel:
             return MOOD_ATTENTION
         if kind == KIND_ANSWERED:
             allowed = self.answered is not None and self.answered[1] == "once"
-            return MOOD_CELEBRATE if allowed else MOOD_IDLE
+            return MOOD_CELEBRATE if allowed else MOOD_DENIED
         if kind == KIND_STATUS and self.running > 0:
             return MOOD_BUSY
         return MOOD_IDLE

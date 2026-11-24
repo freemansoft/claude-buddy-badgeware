@@ -570,13 +570,13 @@ class BuddyMoodTest(unittest.TestCase):
         m.handle_line(heartbeat(total=0, running=0), 600)
         self.assertEqual(self.mood(600 + bm.NO_SESSIONS_DELAY_MS), bm.MOOD_SLEEP)
 
-    def test_denied_is_idle(self):
+    def test_denied_has_its_own_mood(self):
         m = self.model
         m.on_connect(0)
         m.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
         m.record_decision(m.permission_message(False, 200, m.prompt_doc()))
         scr = self.screen(200)
-        self.assertEqual((scr[bm.S_KIND], scr[bm.S_MOOD]), (bm.KIND_ANSWERED, bm.MOOD_IDLE))
+        self.assertEqual((scr[bm.S_KIND], scr[bm.S_MOOD]), (bm.KIND_ANSWERED, bm.MOOD_DENIED))
 
     def test_mood_never_changes_without_the_key(self):
         m = self.model
@@ -594,7 +594,8 @@ class BuddyMoodTest(unittest.TestCase):
     def test_every_mood_has_a_picture(self):
         import make_buddy_art
 
-        moods = {bm.MOOD_SLEEP, bm.MOOD_IDLE, bm.MOOD_BUSY, bm.MOOD_ATTENTION, bm.MOOD_CELEBRATE}
+        moods = {bm.MOOD_SLEEP, bm.MOOD_IDLE, bm.MOOD_BUSY, bm.MOOD_ATTENTION, bm.MOOD_CELEBRATE,
+                 bm.MOOD_DENIED}
         self.assertEqual(moods, set(make_buddy_art.STATES))
 
 

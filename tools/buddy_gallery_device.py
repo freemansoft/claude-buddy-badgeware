@@ -1,15 +1,15 @@
 """Runs on the badge (tools/buddy_gallery.py sends it with mpremote):
 shows the buddy images on the real screen, to judge them by eye.
 
-    page 1      all five states side by side, at half size
-    pages 2-6   one state at full size, beside sample text, roughly
+    page 1      all six states side by side, at half size
+    pages 2-7   one state at full size, beside sample text, roughly
                 where the app would put it
     DOWN / UP   next / previous page
     C           stop; tools/buddy_gallery.py then restarts the badge
 
 Reads the images the app ships, /system/apps/claude_buddy/buddy_art/
 <model>_<state>.png, so install the app first. Prints a GALLERY line
-with each image's size and the RAM the five take. Only the Tufty has a
+with each image's size and the RAM the six take. Only the Tufty has a
 buddy; on a Badger it says so and stops.
 """
 
@@ -27,9 +27,9 @@ if APP_DIR not in sys.path:
 from buddy_profile import PROFILES  # noqa: E402
 from buddy_view import _color, _face  # noqa: E402
 
-STATES = ("sleep", "idle", "busy", "attention", "celebrate")
+STATES = ("sleep", "idle", "busy", "attention", "celebrate", "denied")
 TITLES = {"sleep": "No sessions", "idle": "Idle", "busy": "Working", "attention": "Allow Bash?",
-          "celebrate": "Approved Bash"}
+          "celebrate": "Approved Bash", "denied": "Denied Bash"}
 SAMPLE = ("Claude's latest reply, wrapped", "beside the buddy so you can", "judge the balance.")
 PAD = 4
 
@@ -75,8 +75,9 @@ def text(face, s, x, y):
 
 
 def overview():
-    """All five, scaled to half size or smaller so they fit in a row
-    with gaps between."""
+    """All six, scaled to half size or smaller so they fit in a row
+    with gaps between. Every other label sits a line lower, so long
+    names don't run into each other."""
     n = len(STATES)
     thumb = min(size // 2, (screen.width - (n + 1) * PAD) // n)
     gap = (screen.width - thumb * n) // (n + 1)
@@ -85,7 +86,7 @@ def overview():
         x = gap + i * (thumb + gap)
         screen.blit(art[state], rect(0, 0, size, size), rect(x, y, thumb, thumb))
         screen.pen = fg
-        text(body_face, state, x, y + thumb + PAD)
+        text(body_face, state, x, y + thumb + PAD + (i % 2) * body_face.height)
 
 
 def one(state):

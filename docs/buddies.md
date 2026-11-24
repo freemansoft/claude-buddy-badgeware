@@ -24,6 +24,12 @@ whatever it's doing:
 | busy      | Glancing up at two meshing gears, mouth pulled to one side |
 | attention | Wide eyes, small "o" mouth, `!?` above                     |
 | celebrate | Happy `^ ^` eyes, open grin, a party hat and confetti      |
+| denied    | Flat eyes, straight mouth, an `x` above                    |
+
+Denied is neutral on purpose, not sad: denying is often the right
+call, and the buddy shouldn't make you feel bad for it. Upstream has
+no state for a denial; this one was added so the buddy visibly
+answers a deny the way it answers an approval.
 
 Upstream also has dizzy (shaking the M5Stick) and heart (petting it,
 or approving within 5 s). The badges have no motion or touch sensor,
@@ -78,8 +84,8 @@ decision, not a bug fix.
    ```
 
    It stops whatever the Tufty was running and shows:
-   - **page 1:** all five states side by side, at half size;
-   - **pages 2–6:** each state at full size on the right, beside a
+   - **page 1:** all six states side by side, at half size;
+   - **pages 2–7:** each state at full size on the right, beside a
      title and sample text, roughly as the app would lay it out.
 
    **DOWN** / **UP** turn pages and **C** stops; the Tufty then
@@ -91,6 +97,9 @@ decision, not a bug fix.
 right beside the text, and the states read clearly. Two rounds of
 changes came from seeing them on the screen: smaller (from 128 px) and
 bigger feet.
+
+The denied picture was added on 2026-11-24 and approved from a preview
+sheet on the Mac; it hasn't been seen on a Tufty yet.
 
 ## Why not claude-desktop-buddy's ASCII pets
 
@@ -129,7 +138,7 @@ adds no repaints of its own:
 | Status with sessions running              | busy      |
 | A prompt, or waiting without one          | attention |
 | Answered: approved                        | celebrate |
-| Answered: denied                          | idle      |
+| Answered: denied                          | denied    |
 | Pair with Claude / Disconnected (framed)  | no buddy  |
 
 Busy starts at 1 running session, not upstream's 3, because the
