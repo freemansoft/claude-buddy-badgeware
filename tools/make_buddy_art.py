@@ -65,8 +65,8 @@ BADGES = {
 
 # Every state has the same body width. Sleep is squashed flatter.
 WIDTH = 0.35
-BODY = {"cy": 0.66, "rx": WIDTH, "ry": 0.27}
-SLEEP_BODY = {"cy": 0.68, "rx": WIDTH, "ry": 0.22}
+BODY = {"cy": 0.64, "rx": WIDTH, "ry": 0.27}
+SLEEP_BODY = {"cy": 0.67, "rx": WIDTH, "ry": 0.22}
 
 
 # -- shapes: (role, bbox, inside(x, y)) ----------------------------------------
@@ -172,10 +172,10 @@ def question(role, cx, top, h, r):
 
 def body(cx=0.5, cy=0.66, rx=WIDTH, ry=0.27):
     """The blob and its two little feet."""
-    foot_y = cy + ry * 0.92
+    foot_y = cy + ry * 1.02  # well below the body, so they show
     return [
-        ellipse("body", cx - rx * 0.45, foot_y, rx * 0.22, ry * 0.16),
-        ellipse("body", cx + rx * 0.45, foot_y, rx * 0.22, ry * 0.16),
+        ellipse("body", cx - rx * 0.48, foot_y, rx * 0.23, ry * 0.21),
+        ellipse("body", cx + rx * 0.48, foot_y, rx * 0.23, ry * 0.21),
         squircle("body", cx, cy, rx, ry),
     ]
 
