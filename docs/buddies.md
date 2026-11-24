@@ -8,7 +8,8 @@ to Claude Buddy.
 
 **Status: phase 0, evaluation.** The pets are imported and can be
 viewed on a badge with a gallery tool, but the app doesn't show them
-yet: nothing on its screens has changed. Not yet tried on hardware.
+yet: nothing on its screens has changed. Viewed on a Tufty 2350 on
+2026-11-23 (see [Results](#results)); not yet tried on a Badger.
 
 ## Where they come from
 
@@ -87,22 +88,24 @@ on the left. That was tried first, and on the Tufty the bottom line
 (feet, base, tail), usually the narrowest, sat too far left. Centring
 a line one character shorter than the widest moves it by half a cell.
 
-The ROM pixel fonts' widths, read from their `.ppf` glyph tables. The
-gallery measures them on the badge, and they can differ: `sins`
-measured 8 px wide on the Tufty, not 7. The widest pose, marks
-included, is 18 cells by 5 rows:
+The cell sizes the gallery measured on a Tufty 2350 (2026-11-23). The
+pixel fonts measure 1 px wider than the advance in their `.ppf` files
+(`sins` is 7 px in the file), presumably the gap between letters. The
+widest pose, marks included, is 18 cells by 5 rows:
 
-| Font      | Cell (px, from the file) | Widest pose (px) |
-| --------- | ------------------------ | ---------------- |
-| `sins`    | 7 × 12 (8 × 12 measured) | 126 × 60         |
-| `teatime` | 7 × 12                   | 126 × 60         |
-| `kobold`  | 7 × 12                   | 126 × 60         |
-| `hungry`  | 7 × 15                   | 126 × 75         |
-| `nope`    | 10 × 13                  | 180 × 65         |
+| Font        | Cell (px) | Widest pose (px) |
+| ----------- | --------- | ---------------- |
+| `sins`      | 8 × 12    | 144 × 60         |
+| `teatime`   | 8 × 12    | 144 × 60         |
+| `nope`      | 11 × 13   | 198 × 65         |
+| MonaSans 12 | 11 × 12   | 198 × 60         |
+| MonaSans 14 | 13 × 14   | 234 × 70         |
+| MonaSans 16 | 14 × 16   | 252 × 80         |
 
-At 7 px cells a pet fits in a column about 130 px wide beside the text
-on the Badger's 264×176 screen. `nope`, the Badger's body font, is too
-wide for that. MonaSans (the Tufty's font) is measured by the gallery.
+Only the 8 px fonts leave useful room for text beside a pet: on the
+Tufty's 320 px, about 160 px; on the Badger's 264 px, about 105 px,
+if the Badger measures the same (not yet run there). `nope`, the
+Badger's body font, and MonaSans are too wide for a column.
 
 ## Trying them on a badge
 
@@ -135,8 +138,25 @@ For each species, at the smallest font that reads well:
   `"` are the risky ones), no ghosting after a few screens.
 - **Memory:** the species table's RAM next to what the app has free.
 
-Results go in a table here, per species: use as is, use with a
-different pose (a `PREFERRED` entry), or drop. Not yet done.
+### Results
+
+**Tufty 2350, 2026-11-23** (firmware v3.1.1, `sins` and the other
+fonts):
+
+- **Alignment:** with each line centred, the bottom lines (feet,
+  bases, tails) sit right. With upstream's padded columns they were
+  too far left.
+- **Memory:** the species table takes 11,392 bytes of RAM, with about
+  8 MB free. Not a concern on the Tufty; still to measure on the
+  Badger.
+- **Fonts:** cell sizes in the table above.
+- **Per species** (recognisable, five distinct states, clean
+  characters): not yet recorded.
+
+**Badger 2350:** not yet run.
+
+Per species, the verdict will be: use as is, use with a different pose
+(a `PREFERRED` entry in `tools/import_buddies.py`), or drop.
 
 ## Next: showing a pet in the app (phase 1)
 
