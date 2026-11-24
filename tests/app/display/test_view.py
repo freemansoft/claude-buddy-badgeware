@@ -23,6 +23,7 @@ class FakeScreen:
         self.pens = {}  # text -> the pen it was drawn with
         self.font = None
         self.pen = None
+        self.blits = []  # (picture path, where)
 
     # True: firmware where "[" starts a glyph tag and "[[" is one literal
     # "[". False: firmware that draws brackets as they are (Badgeware
@@ -54,6 +55,10 @@ class FakeScreen:
         self.drawn = []
         self.rects = []
         self.pens = {}
+        self.blits = []
+
+    def blit(self, picture, where):
+        self.blits.append((picture.path, where))
 
     def rectangle(self, *args):
         self.rects.append(tuple(args))
@@ -84,7 +89,20 @@ def install_badgeware_stubs():
         white="white", black="black", dark_grey="dark_grey", rgb=lambda *a: a
     )
     builtins.badge = types.SimpleNamespace(model="badger")
-    builtins.image = types.SimpleNamespace(OFF=0)
+    builtins.image = types.SimpleNamespace(OFF=0, load=_load_picture)
+    builtins.vec2 = lambda x, y: (x, y)
+
+
+# Buddy pictures the fake image.load() treats as missing; every load.
+MISSING_PICTURES = set()
+LOADED_PICTURES = []
+
+
+def _load_picture(path):
+    LOADED_PICTURES.append(path)
+    if path in MISSING_PICTURES:
+        raise OSError(2, "no such file")
+    return types.SimpleNamespace(path=path)
 
 
 install_badgeware_stubs()
@@ -94,12 +112,17 @@ import buddy_view
 
 
 def make_scr(kind="status", title="Allow Bash?", lines=(), actionable=False,
-             name="Claude_A1B2C3", status="Connected", battery="75%", tokens="", doc="d"):
-    """A screen tuple in buddy_model's layout (see BuddyModel.screen)."""
+             name="Claude_A1B2C3", status="Connected", battery="75%", tokens="", doc="d",
+             mood="default"):
+    """A screen tuple in buddy_model's layout (see BuddyModel.screen).
+    The buddy's mood defaults to none on the pairing screen and "idle"
+    elsewhere, as the model gives; only badges with a buddy draw it."""
     if kind == "status" and title == "Allow Bash?":
         title = "Idle"
+    if mood == "default":
+        mood = None if kind == "pair" else "idle"
     return (name, status, kind, actionable, title, tuple(lines), actionable,
-            False, doc, battery == "USB", battery, tokens)
+            False, doc, battery == "USB", battery, tokens, mood)
 
 
 class ViewTest(unittest.TestCase):
@@ -375,6 +398,81 @@ class TuftyViewTest(ViewTest):
         self.assertIs(view.f_bar.font, font.smart)
         self.assertIs(view.f_title.font, font.curse)
         self.assertEqual((view.f_body.size, view.h_body), (0, 16))
+
+
+class BuddyViewTest(unittest.TestCase):
+    """The buddy picture on the Tufty (profile.buddy), and none on the
+    Badger, whose screens must stay exactly as they were."""
+
+    def setUp(self):
+        FakeScreen.width, FakeScreen.height = 320, 240
+        self.addCleanup(TuftyViewTest._back_to_badger_size)
+        buddy_view._loaded.clear()
+        LOADED_PICTURES.clear()
+        self.view = buddy_view.BuddyView(buddy_profile.TUFTY)
+        self.size = buddy_profile.TUFTY.buddy.size
+
+    def draw(self, **kw):
+        builtins.screen = FakeScreen()
+        self.view.draw(make_scr(**kw))
+        return screen
+
+    def test_picture_on_the_right_of_the_body(self):
+        s = self.draw(kind="status", title="Working", mood="busy")
+        self.assertEqual(len(s.blits), 1)
+        path, (x, y) = s.blits[0]
+        self.assertEqual(path, "/system/apps/claude_buddy/buddy_art/tufty_busy.png")
+        v = self.view
+        self.assertEqual(x + self.size, v.body_x + v.body_w)
+        self.assertGreaterEqual(y, v.body_top)
+        self.assertLessEqual(y + self.size, v.body_bottom - v.h_body)
+
+    def test_text_stays_left_of_the_picture(self):
+        s = self.draw(kind="prompt", title="Allow Bash?", actionable=True,
+                      lines=(("w", LONG),), mood="attention")
+        _path, (pic_x, pic_y) = s.blits[0]
+        for text, x, y in s.drawn:
+            if self.view.body_top <= y < pic_y + self.size and y < self.view.bottom_rule - self.view.h_body:
+                self.assertLessEqual(x + s.measure_text(text)[0], pic_x - buddy_view.BUDDY_GAP, text)
+
+    def test_bottom_row_keeps_the_full_width(self):
+        s = self.draw(kind="status", lines=(("c", "1 running, 0 waiting"),), tokens="31k today", mood="busy")
+        y = max(y for text, _x, y in s.drawn if text.startswith("1 running"))
+        self.assertGreater(y, s.blits[0][1][1] + self.size - 1)  # under the picture
+        self.assertIn("1 running, 0 waiting, 31k today", [text for text, _x, _y in s.drawn])  # not shortened
+
+    def test_no_picture_on_the_pairing_screen(self):
+        s = self.draw(kind="pair", title="Pair with Claude", lines=(("w", "Connect"),))
+        self.assertEqual(s.blits, [])
+
+    def test_picture_loaded_only_when_the_mood_changes(self):
+        for mood in ("idle", "idle", "busy", "busy", "idle"):
+            self.draw(kind="status", mood=mood)
+        self.assertEqual([p.rsplit("_", 1)[-1] for p in LOADED_PICTURES], ["idle.png", "busy.png", "idle.png"])
+
+    def test_missing_picture_is_skipped(self):
+        path = buddy_profile.TUFTY.buddy.path.format("sleep")
+        MISSING_PICTURES.add(path)
+        self.addCleanup(MISSING_PICTURES.clear)
+        s = self.draw(kind="none", title="No sessions", mood="sleep")
+        self.assertEqual(s.blits, [])
+        self.assertIn("No sessions", [text for text, _x, _y in s.drawn])
+
+    def test_badger_draws_no_buddy_and_the_same_screen(self):
+        # The Badger's profile has no buddy: whatever the mood, its
+        # screen is drawn exactly as without one, and nothing is loaded.
+        TuftyViewTest._back_to_badger_size()
+        badger = buddy_view.BuddyView(buddy_profile.BADGER)
+        self.assertIsNone(buddy_profile.BADGER.buddy)
+        drawn = []
+        for mood in (None, "attention"):
+            builtins.screen = FakeScreen()
+            badger.draw(make_scr(kind="prompt", title="Allow Bash?", actionable=True,
+                                 lines=(("w", LONG),), mood=mood))
+            self.assertEqual(screen.blits, [])
+            drawn.append((screen.drawn, screen.rects))
+        self.assertEqual(drawn[0], drawn[1])
+        self.assertEqual(LOADED_PICTURES, [])
 
 
 class PlainTest(unittest.TestCase):

@@ -55,6 +55,7 @@ timings, because every redraw costs power. Both come from its profile
 | Accents                 | None                                                                     | Not implemented (plan: e.g. highlight the title when the `emphasis` flag is set)                                                                |
 | Fonts                   | `nope` pixel font, sized for 264×176                                     | MonaSans (vector, from the firmware): 18 px header and footer, 20 px body, 24 px titles; pixel fonts as fallback                                |
 | Animation               | None: nothing on screen moves                                            | Not implemented (open question: a "working" indicator?)                                                                                         |
+| Buddy character         | None: text only (decided, see [buddies](buddies.md#not-on-the-badger))   | An orange blob, 96 px, on the right of connected screens; one still picture per state                                                           |
 | Instant feedback        | Case-light blink on A/B, because the panel takes 1–2 s                   | Not implemented (the screen itself may be fast enough)                                                                                          |
 
 Things that are the **same on both**: the protocol, the BLE link, the

@@ -530,6 +530,75 @@ class ReplyTest(unittest.TestCase):
             (bm.WRAP, "cat <<EOF > f.txt"), (bm.WRAP, "hello"), (bm.WRAP, "EOF")))
 
 
+class BuddyMoodTest(unittest.TestCase):
+    """The buddy character's state (S_MOOD): which screen shows which
+    picture, and that it never changes without the screen key, so it
+    can't cause a repaint of its own (docs/buddies.md)."""
+
+    def setUp(self):
+        self.model = bm.BuddyModel("Claude_ABC123")
+        self.screens = []
+
+    def screen(self, now):
+        scr = self.model.screen(now)
+        self.screens.append(scr)
+        return scr
+
+    def mood(self, now):
+        return self.screen(now)[bm.S_MOOD]
+
+    def test_no_buddy_while_not_connected(self):
+        self.assertIsNone(self.mood(0))
+        self.model.on_connect(0)
+        self.model.on_disconnect()
+        self.assertIsNone(self.mood(10))  # "Disconnected"
+
+    def test_moods_follow_the_screen(self):
+        m = self.model
+        m.on_connect(0)
+        self.assertEqual(self.mood(0), bm.MOOD_IDLE)  # connected, no heartbeat yet
+        m.handle_line(heartbeat(running=0, msg=""), 100)
+        self.assertEqual(self.mood(100), bm.MOOD_IDLE)
+        m.handle_line(heartbeat(running=1, msg=""), 200)
+        self.assertEqual(self.mood(200), bm.MOOD_BUSY)
+        m.handle_line(heartbeat(waiting=1, prompt=PROMPT), 300)
+        self.assertEqual(self.mood(300), bm.MOOD_ATTENTION)
+        m.record_decision(m.permission_message(True, 400, m.prompt_doc()))
+        self.assertEqual(self.mood(400), bm.MOOD_CELEBRATE)  # "Allowed Bash"
+        m.handle_line(heartbeat(waiting=1, msg="approve: Bash"), 500)
+        self.assertEqual(self.mood(500), bm.MOOD_ATTENTION)  # waiting, no prompt
+        m.handle_line(heartbeat(total=0, running=0), 600)
+        self.assertEqual(self.mood(600 + bm.NO_SESSIONS_DELAY_MS), bm.MOOD_SLEEP)
+
+    def test_denied_has_its_own_mood(self):
+        m = self.model
+        m.on_connect(0)
+        m.handle_line(heartbeat(waiting=1, prompt=PROMPT), 100)
+        m.record_decision(m.permission_message(False, 200, m.prompt_doc()))
+        scr = self.screen(200)
+        self.assertEqual((scr[bm.S_KIND], scr[bm.S_MOOD]), (bm.KIND_ANSWERED, bm.MOOD_DENIED))
+
+    def test_mood_never_changes_without_the_key(self):
+        m = self.model
+        m.on_connect(0)
+        steps = [heartbeat(running=0, msg="x"), heartbeat(running=1, msg="x"),
+                 heartbeat(running=3, msg="x"), heartbeat(running=0, msg="x"),
+                 heartbeat(waiting=1, prompt=PROMPT), heartbeat(running=2, msg="")]
+        for i, msg in enumerate(steps):
+            m.handle_line(msg, 100 * (i + 1))
+            self.screen(100 * (i + 1))
+        for a, b in zip(self.screens, self.screens[1:], strict=False):
+            if bm.screen_key(a) == bm.screen_key(b):
+                self.assertEqual(a[bm.S_MOOD], b[bm.S_MOOD], (a, b))
+
+    def test_every_mood_has_a_picture(self):
+        import make_buddy_art
+
+        moods = {bm.MOOD_SLEEP, bm.MOOD_IDLE, bm.MOOD_BUSY, bm.MOOD_ATTENTION, bm.MOOD_CELEBRATE,
+                 bm.MOOD_DENIED}
+        self.assertEqual(moods, set(make_buddy_art.STATES))
+
+
 class PassengerTest(unittest.TestCase):
     """The battery and token labels, and which battery and USB changes
     are in the screen key (repaint) and which ride along."""

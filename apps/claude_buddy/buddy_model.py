@@ -110,6 +110,19 @@ S_ON_USB = 9
 KEY_LEN = 10
 S_BATTERY = 10
 S_TOKENS = 11
+# The buddy character's state (MOODS), or None for no buddy. A
+# passenger, but it can't change on its own: it follows the kind, the
+# running count (in the counts line) and the verdict (in the title),
+# which are all in the key. See buddy_mood().
+S_MOOD = 12
+
+# The buddy's states, as named in apps/claude_buddy/buddy_art/.
+MOOD_SLEEP = "sleep"
+MOOD_IDLE = "idle"
+MOOD_BUSY = "busy"
+MOOD_ATTENTION = "attention"
+MOOD_CELEBRATE = "celebrate"
+MOOD_DENIED = "denied"
 
 _TOOL_SUMMARY_KEYS = (
     "command",
@@ -685,13 +698,14 @@ class BuddyModel:
         """Everything the view needs, as a comparable tuple:
 
         (name, status, kind, emphasis, title, lines, actionable,
-         battery_low, doc, on_usb, battery_label, tokens_label)
+         battery_low, doc, on_usb, battery_label, tokens_label, mood)
 
         lines is a tuple of (mode, text); emphasis is True when the
-        screen needs the user; doc identifies the document for paging.
-        Only the first KEY_LEN fields decide whether to repaint (see
-        screen_key); the battery and token labels ride along with
-        repaints caused by something else.
+        screen needs the user; doc identifies the document for paging;
+        mood is the buddy's state (see buddy_mood). Only the first
+        KEY_LEN fields decide whether to repaint (see screen_key); the
+        battery and token labels ride along with repaints caused by
+        something else.
         """
         base = self._screen(now_ms)
         kind = base[S_KIND]
@@ -709,7 +723,27 @@ class BuddyModel:
             self.on_usb,
             self.battery_label(),
             self.tokens_label(),
+            self.buddy_mood(kind),
         )
+
+    def buddy_mood(self, kind):
+        """The buddy's state for a screen of ``kind``, or None (no buddy
+        on the pairing screens). Only reads what the screen key already
+        shows, so the buddy never causes a repaint of its own: the kind,
+        whether anything is running (the counts line) and whether an
+        answered prompt was allowed (the title)."""
+        if kind == KIND_PAIR:
+            return None
+        if kind == KIND_NO_SESSIONS:
+            return MOOD_SLEEP
+        if kind in ATTENTION_KINDS:
+            return MOOD_ATTENTION
+        if kind == KIND_ANSWERED:
+            allowed = self.answered is not None and self.answered[1] == "once"
+            return MOOD_CELEBRATE if allowed else MOOD_DENIED
+        if kind == KIND_STATUS and self.running > 0:
+            return MOOD_BUSY
+        return MOOD_IDLE
 
     def _screen(self, now_ms):
         """The first KEY_LEN-3 fields of the screen tuple. Screens in

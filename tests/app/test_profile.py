@@ -4,8 +4,10 @@ import builtins
 import unittest
 
 import support  # noqa: F401 - puts apps/claude_buddy on sys.path
+from support import ROOT
 
 import buddy_profile as bp
+import make_buddy_art
 
 # Badgeware's display-mode flags, as builtins like on the badge, so the
 # profiles' mode functions can run here.
@@ -59,3 +61,19 @@ class ProfileTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BuddyProfileTest(unittest.TestCase):
+    def test_only_the_tufty_has_a_buddy(self):
+        # The Badger stays text-only (docs/buddies.md).
+        self.assertIsNone(bp.BADGER.buddy)
+        self.assertIsNotNone(bp.TUFTY.buddy)
+
+    def test_tufty_buddy_matches_the_generated_pictures(self):
+        buddy = bp.TUFTY.buddy
+        self.assertEqual(buddy.size, make_buddy_art.BADGES["tufty"]["size"])
+        for state in make_buddy_art.STATES:
+            path = buddy.path.format(state)
+            self.assertTrue(path.startswith("/system/apps/claude_buddy/buddy_art/"), path)
+            name = path.rsplit("/", 1)[-1]
+            self.assertTrue((ROOT / "apps" / "claude_buddy" / "buddy_art" / name).is_file(), name)
