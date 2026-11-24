@@ -1,6 +1,6 @@
 ---
 name: badge-bootstrap
-description: Set up or check a Badgeware badge (Badger 2350 or Tufty 2350) on USB for Claude Buddy - find out which badge is connected (from badge.model), whether its Badgeware firmware is the latest Pimoroni release, flash new firmware, then install the app and confirm it. Use whenever the user has a new or freshly unboxed badge, wants to update or reflash firmware, asks which badge or firmware version is plugged in, sees a badge misbehave after a firmware change, or is about to start work on a badge model (e.g. Tufty support), even if they don't say "bootstrap". Uses tools/badge_info.py, tools/flash_firmware.py and tools/install.py.
+description: Set up or check a Badgeware badge (Badger 2350 or Tufty 2350) on USB for Claude Buddy - find out which badge is connected (from badge.model), whether its Badgeware firmware is the latest Pimoroni release, flash new firmware, then install the app and confirm it from the badge's side. Use whenever the user has a new or freshly unboxed badge, wants to update or reflash firmware, asks which badge or firmware version is plugged in, sees a badge misbehave after a firmware change, or is about to start work on a badge model (e.g. Tufty support), even if they don't say "bootstrap". Uses tools/badge_info.py, tools/flash_firmware.py, tools/install.py and tools/badge_check.py.
 ---
 
 # Bootstrapping a badge
@@ -54,10 +54,17 @@ model on GitHub with a verdict: current, OLDER, or newer.
   Pimoroni release it is, only its MicroPython build and build date.
   "Current" means it was built within a few days of the latest
   release. Say so when reporting; don't claim the exact version.
-- **It stops whatever was running** on the badge. Tell the user to
-  press RESET afterwards to get back to the menu. Don't run it while
-  the user is in the middle of using Claude Buddy.
-- If `mpremote` is missing: `pip install mpremote`.
+- **It stops whatever was running** on the badge to read it, then
+  restarts the badge with `machine.reset()` (mpremote's `reset`). The
+  badge comes back to the menu, or to the app it was running, as
+  Badgeware's `main.py` decides (see the `badgeware-platforms` skill).
+  If the screen stays frozen, the user presses RESET. Restarting drops
+  any Claude Desktop connection, so don't run it while the user is in
+  the middle of using Claude Buddy. `--no-restart` leaves the badge
+  stopped until RESET.
+- If `mpremote` is missing: it's in `requirements-dev.txt` (in
+  `.venv/bin`), or `pip install mpremote`. The tools look for it on
+  `PATH`.
 
 If the verdict is current and Bluetooth and aioble are present, skip
 to step 4.
@@ -106,11 +113,16 @@ Flashing the other model's firmware doesn't brick a badge (the
 bootloader is in ROM), but nothing works until the right image is
 flashed. That's why the model must come from step 1.
 
-Then run `badge_info.py` again (press RESET afterwards). Expect
-`Model ... (from badge.model)`, Bluetooth and aioble `yes`, and a
-"current" verdict.
+Then run `badge_info.py` again (it restarts the badge when done).
+Expect `Model ... (from badge.model)`, Bluetooth and aioble `yes`, and
+a "current" verdict.
 
 ### 4. Install Claude Buddy
+
+Only with firmware step 1 called current (or after flashing it in
+step 3). If the badge is already in disk mode, its firmware can't be
+read: ask whether it was checked earlier in this session, or have the
+user eject the drive and press RESET so `badge_info.py` can run.
 
 Tell the user to **double-tap RESET**; the badge mounts as a drive
 (`BADGER` or `TUFTY`). Then:
@@ -121,8 +133,23 @@ python3 tools/install.py
 
 On macOS and Linux it ejects the drive itself; on Windows (or with
 `--no-eject`) ask the user to eject it. The badge restarts into the
-menu, which lists Claude Buddy. `badge_info.py` should now say
-`installed`.
+menu, which lists Claude Buddy.
+
+Then, with the drive ejected and the badge back in normal mode, check
+the copy from the badge's side:
+
+```bash
+python3 tools/badge_check.py files
+```
+
+It lists `/system/apps/claude_buddy` on the badge over `mpremote` and
+compares names and sizes with the repo: `missing`, `different size`
+(a file cut short, as in the 4096-byte truncation once seen on a
+Badger), `not in the app`, and `macOS junk` (`._` or `__pycache__`
+files). Anything but "The badge's copy matches." means reinstall.
+Don't check by reading the mounted drive instead: until the eject, the
+computer's cache can make it look right when the badge isn't. Like
+`badge_info.py`, it restarts the badge when it's done.
 
 Never reset the badge (RESET, `mpremote`, unplugging) while the drive
 is still mounted: writes still in the computer's cache are lost, and
@@ -143,13 +170,14 @@ firmware's own filesystem (`/system/assets/fonts`); after a
 font is there, or the app falls back to the smaller pixel fonts (see
 `docs/devices.md`).
 
-**Updating the app without the buttons:** with the badge on USB in
-normal mode, `mpremote connect <port> exec "import _msc"` switches it
+**Updating the app without the buttons:** check the firmware first
+(step 1), since the badge is in normal mode anyway. Then
+`mpremote connect <port> exec "import _msc"` switches it
 to USB-drive mode (the same thing a double-tap of RESET does). The
 mpremote call hangs or fails as the serial port goes away; that's
 expected. Run `install.py` (which ejects on macOS and Linux), then ask
 the user to press RESET once: ejecting doesn't restart a badge put
-into drive mode this way.
+into drive mode this way. Then run `badge_check.py files`.
 
 ### 5. Record what changed
 

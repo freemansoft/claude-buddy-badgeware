@@ -81,9 +81,10 @@ Points worth checking every time, because they break silently:
 - **Timing:** heartbeat silence → `No data` at 30 s, link dropped at
   60 s.
 
-`tests/test_buddy_model.py` covers message handling and
-`tests/test_device_logic.py` covers framing (`FramingTest`) and
-dropping links (`DropTest`). A conformance fix needs a test that sends
+`tests/app/model/test_buddy_model.py` covers message handling and
+`tests/app/ble/test_ble.py` covers the advertised name
+(`AdvertisingTest`), framing (`FramingTest`) and dropping links
+(`DropTest`). A conformance fix needs a test that sends
 the exact JSON from the spec.
 
 ## Implementing more of the spec

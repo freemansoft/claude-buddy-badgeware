@@ -1,30 +1,18 @@
-# Lint rules follow Pimoroni's Badgeware firmware (pimoroni/badger2350
-# ci/ruff.toml) so app code reads like the stock apps.
+# Lint rules for the whole repo: Pimoroni's own (the file their badge
+# firmware CI uses, identical in vendor/tufty2350 and vendor/badger2350),
+# so the app reads like the stock apps and the tools and tests follow the
+# same rules. extend takes one file; tests/project/test_ruff_config.py
+# fails if the Tufty's and the Badger's ever differ.
+# Needs the submodules: git submodule update --init
 #
-#   ruff check .
+#   .venv/bin/ruff check .
+#
+# ruff format is not used: Pimoroni's firmware CI only runs ruff check
+# (vendor/*/ci/python.sh), and the formatter would rewrite most files.
+extend = "vendor/tufty2350/ci/ruff.toml"
 
-# Globals Badgeware injects into builtins before an app runs.
-builtins = [
-    "micropython", "const",
-    "algorithm", "brush", "color", "font", "image", "mat3", "pen",
-    "pixel_font", "vector_font", "vec2", "rect", "shape", "screen",
-    "LEFT", "CENTER", "RIGHT", "TOP", "MIDDLE", "BOTTOM", "CLIP", "ELLIPSES",
-    "display", "launch", "run", "loop", "reset", "fatal_error",
-    "wait_for_button_or_alarm",
-    "clamp", "rnd", "frnd",
-    "text", "add_glyph", "add_sprite",
-    "file_exists", "is_dir",
-    "rtc", "State",
-    "badge", "HIRES", "LORES", "VSYNC", "FAST_UPDATE", "FULL_UPDATE",
-    "MEDIUM_UPDATE", "NON_BLOCKING", "DITHER",
-    "BUTTON_A", "BUTTON_B", "BUTTON_C", "BUTTON_UP", "BUTTON_DOWN", "BUTTON_HOME",
-]
-
-lint.select = [
-    "F", "Q", "W", "E", "B", "COM", "BLE", "C4", "ISC", "ICN", "PIE",
-    "RSE", "RET", "SLF", "ARG",
-]
-lint.ignore = ["E501", "E402", "COM812", "ICN001"]
+# The firmware is Pimoroni's to lint.
+extend-exclude = ["vendor"]
 
 [lint.per-file-ignores]
 # Tests poke at internals and use loose stand-in signatures.

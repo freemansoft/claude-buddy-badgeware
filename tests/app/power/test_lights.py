@@ -1,12 +1,10 @@
 """Host-side tests for the case-light patterns (buddy_lights)."""
 
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps" / "claude_buddy"))
+import support  # noqa: F401 - puts apps/claude_buddy on sys.path
 
-from buddy_lights import CaseLights  # noqa: E402
+from buddy_lights import CaseLights
 
 ON = 0.6
 

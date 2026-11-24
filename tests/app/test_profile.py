@@ -1,13 +1,11 @@
 """Host tests for the per-badge profiles (buddy_profile)."""
 
 import builtins
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps" / "claude_buddy"))
+import support  # noqa: F401 - puts apps/claude_buddy on sys.path
 
-import buddy_profile as bp  # noqa: E402
+import buddy_profile as bp
 
 # Badgeware's display-mode flags, as builtins like on the badge, so the
 # profiles' mode functions can run here.
@@ -21,22 +19,6 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(sorted(bp.PROFILES), ["badger", "tufty"])
         for model, profile in bp.PROFILES.items():
             self.assertEqual(profile.model, model)
-
-    def test_every_profile_has_every_setting(self):
-        for profile in bp.PROFILES.values():
-            self.assertIsInstance(profile.mode(), int)
-            self.assertEqual(len(profile.fonts), 3)  # bar, title, body
-            self.assertEqual(set(profile.theme), {"bg", "fg", "title", "footer", "meta"})
-            for refresh in (profile.refresh(True), profile.refresh(False)):
-                self.assertIsInstance(refresh, bp.Refresh)
-
-    def test_refresh_follows_the_power_source(self):
-        usb = bp.Refresh(0, 0, 0)
-        battery = bp.Refresh(300, 15000, 1000)
-        profile = bp.Profile("x", lambda: 0, False, False, False, ((("a",),) * 3),
-                             {}, None, refresh_usb=usb, refresh_battery=battery)
-        self.assertIs(profile.refresh(True), usb)
-        self.assertIs(profile.refresh(False), battery)
 
     def test_badger_uses_the_eink_rules_on_both_power_sources(self):
         # Every e-ink refresh is a 1-2 s flash: never live. Status

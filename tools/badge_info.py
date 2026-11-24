@@ -2,12 +2,16 @@
 """Identify the Badgeware badge on USB and check its firmware.
 
 The badge must be in normal mode (menu or an app running), not USB
-disk mode. This stops whatever is running on it (mpremote interrupts
-it); press RESET afterwards to get back to the menu.
+disk mode. mpremote interrupts whatever is running to read it, so
+afterwards this restarts the badge with machine.reset() (mpremote's
+`reset`), which brings back the menu or the app it was running, as
+Badgeware's main.py decides. --no-restart leaves it stopped, its screen
+frozen, until RESET. (Adapted from freemansoft/MoodBadger2350.)
 
     python3 tools/badge_info.py              # finds the badge
     python3 tools/badge_info.py --port /dev/cu.usbmodem201401
     python3 tools/badge_info.py --json       # machine-readable
+    python3 tools/badge_info.py --no-restart # leave it stopped
 
 It reports:
 - the model, from badge.model ("badger" or "tufty");
@@ -108,8 +112,16 @@ def parse_info(output):
     raise ValueError("no BADGE_INFO line in:\n" + output)
 
 
-def read_badge(port):
-    result = run(["mpremote", "connect", port, "exec", DEVICE_SNIPPET])
+def mpremote_command(port, restart=True):
+    """The mpremote call that reads the badge. mpremote stops the
+    running program to do it, which leaves the screen frozen on its last
+    picture, so by default it ends with `reset` (machine.reset())."""
+    cmd = ["mpremote", "connect", port, "exec", DEVICE_SNIPPET]
+    return cmd + ["reset"] if restart else cmd
+
+
+def read_badge(port, restart=True):
+    result = run(mpremote_command(port, restart))
     if result.returncode != 0:
         sys.exit("mpremote failed:\n" + (result.stderr or result.stdout))
     return parse_info(result.stdout)
@@ -125,7 +137,7 @@ def latest_for(model):
         return None, "couldn't reach GitHub ({})".format(e)
 
 
-def report(port, info, release, why_not):
+def report(port, info, release, why_not, restarted=True):
     model = info["model"]
     built = rel.build_date(info["version"])
     lines = [
@@ -164,7 +176,11 @@ def report(port, info, release, why_not):
         print("\nClaude Buddy supports {} only.".format(" and ".join(rel.MODELS)))
     if not (info["bluetooth"] and info["aioble"]):
         print("\nThis firmware lacks Bluetooth support Claude Buddy needs; update it.")
-    print("\nThe badge's running program was stopped; press RESET to get back to the menu.")
+    if restarted:
+        print("\nThe badge was restarted (machine.reset()); it comes back to the menu")
+        print("or the app it was running. If its screen stays frozen, press RESET.")
+    else:
+        print("\nThe badge's running program was stopped; press RESET to get back to the menu.")
 
 
 def main():
@@ -173,12 +189,14 @@ def main():
     parser.add_argument("--port", help="the badge's serial port (default: find it)")
     parser.add_argument("--json", action="store_true", help="print the raw details as JSON")
     parser.add_argument("--offline", action="store_true", help="don't look up the latest release")
+    parser.add_argument("--no-restart", action="store_true",
+                        help="leave the badge stopped at the REPL instead of restarting it")
     args = parser.parse_args()
 
     if not shutil.which("mpremote"):
         sys.exit("mpremote not found. Install it with: pip install mpremote")
     port = choose_port(args.port)
-    info = read_badge(port)
+    info = read_badge(port, restart=not args.no_restart)
     release, why_not = (None, "not checked (--offline)") if args.offline else latest_for(info["model"])
 
     if args.json:
@@ -191,7 +209,7 @@ def main():
                 info["build_date"], info["latest_published"])
         print(json.dumps(info, indent=2))
     else:
-        report(port, info, release, why_not)
+        report(port, info, release, why_not, restarted=not args.no_restart)
 
 
 if __name__ == "__main__":

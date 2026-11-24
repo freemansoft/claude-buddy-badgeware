@@ -7,26 +7,34 @@ description: Writing and formatting standard for Claude Buddy's Markdown (README
 
 ## Formatting: prettier, pinned
 
-All Markdown is formatted with **prettier 3.9.10**, settings in
-`.prettierrc.json` (`proseWrap: preserve`). The version is pinned so
-that everyone's tables and lists come out byte-identical; an unpinned
-`npx prettier` can reformat files nobody touched.
+All Markdown is formatted with prettier, at the version in
+`.prettier-version`, with the settings in `.prettierrc.json`
+(`proseWrap: preserve`). The version is pinned so that everyone's
+tables and lists come out byte-identical; an unpinned `npx prettier`
+can reformat files nobody touched.
 
 After editing Markdown, and before committing:
 
 ```bash
-npx --yes prettier@3.9.10 --write <changed .md files>
-npx --yes prettier@3.9.10 --check "**/*.md"
+npx --yes prettier@$(cat .prettier-version) --write <changed .md files>
+git ls-files -z '*.md' | xargs -0 npx --yes prettier@$(cat .prettier-version) --config .prettierrc.json --check
 ```
 
+The check uses `git ls-files` so it skips the `vendor/` submodules
+(Pimoroni's Markdown isn't ours to format); it misses new files until
+they're added, so check those by name too.
+
 `.githooks/pre-commit` checks the staged `.md` files and blocks the
-commit if any aren't formatted. It's active when
+commit if any aren't formatted (it also runs `ruff check` and
+`mpy-cross` on staged Python). It's active when
 `git config core.hooksPath` prints `.githooks`; if it doesn't, tell the
 user rather than setting it silently. Don't bypass the hook with
 `--no-verify`; format the files instead.
 
-If you change the prettier version, change it in all three places: this
-file, `.githooks/pre-commit`, and the README's "Checks on the host".
+To change the prettier version, change `.prettier-version` only. The
+hook and CI read it, and the docs point at it rather than repeating the
+number; `tests/project/test_prettier_version.py` fails if a file writes the
+version out again.
 
 ## Wrapping and layout
 
@@ -68,7 +76,9 @@ so the two can't drift apart.
 | Decisions not to use parts of the spec                      | `docs/protocol.md` "Decisions"; README roadmap "Not planned" |
 | Power: consumers, USB power vs battery, power constants     | `docs/power.md`                                              |
 | Badger (e-ink) vs Tufty (LCD) display differences           | `docs/devices.md`                                            |
+| Badger vs Tufty firmware facts, with `vendor/` citations    | `badgeware-platforms` skill                                  |
 | How Claude should change code / protocol / docs             | `.claude/skills/`                                            |
+| Development setup and commands, in brief                    | `CLAUDE.md` (the README's "Development" in full)             |
 
 When you change a number (a timeout, a step, a limit), grep the docs
 for the old value and the constant's name: some numbers appear in more

@@ -1,12 +1,10 @@
 """Host tests for the Tufty backlight dimming (buddy_backlight)."""
 
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps" / "claude_buddy"))
+import support  # noqa: F401 - puts apps/claude_buddy on sys.path
 
-from buddy_backlight import Backlight  # noqa: E402
+from buddy_backlight import Backlight
 
 IDLE = 60000
 
