@@ -203,10 +203,12 @@ that ships with its firmware, at 18 px for the header and footer, 20 px
 for the body and 24 px for titles. Its pixel fonts were too small to
 read comfortably.
 
-There is no creature or animation. Nothing on screen moves. A buddy
-character for the Tufty, an orange blob with one still picture per
-state, is drawn but not yet shown by the app: see
-[docs/buddies.md](docs/buddies.md). The Badger won't have one.
+Nothing on screen moves. On the Tufty, a buddy character, an orange
+blob, sits on the right of connected screens: asleep with no sessions,
+idle, busy with gears while Claude works, `!?` when a prompt is
+waiting, and a party hat when you allow one. One still picture per
+state; see [docs/buddies.md](docs/buddies.md). The Badger has no
+buddy.
 
 ## Buttons
 

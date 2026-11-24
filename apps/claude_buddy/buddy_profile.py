@@ -79,6 +79,16 @@ class Backlight:
         self.idle_ms = idle_ms
 
 
+class Buddy:
+    """The buddy character: one still picture per state, ``size``
+    pixels square, at ``path`` with the state's name in place of {}
+    (drawn by tools/make_buddy_art.py; see docs/buddies.md)."""
+
+    def __init__(self, path, size):
+        self.path = path
+        self.size = size
+
+
 class Profile:
     """One badge's settings.
 
@@ -97,6 +107,8 @@ class Profile:
     - ``backlight``: a Backlight, or None for a badge without one.
     - ``refresh_usb`` / ``refresh_battery``: a Refresh for each power
       source.
+    - ``buddy``: a Buddy drawn on the right of connected screens, or
+      None for no buddy (the Badger: docs/buddies.md).
     """
 
     def __init__(
@@ -111,6 +123,7 @@ class Profile:
         backlight,
         refresh_usb,
         refresh_battery,
+        buddy=None,
     ):
         self.model = model
         self.mode = mode
@@ -122,6 +135,7 @@ class Profile:
         self.backlight = backlight
         self.refresh_usb = refresh_usb
         self.refresh_battery = refresh_battery
+        self.buddy = buddy
 
     def refresh(self, on_usb):
         return self.refresh_usb if on_usb else self.refresh_battery
@@ -169,6 +183,8 @@ TUFTY = Profile(
     # redraw costs power.
     refresh_usb=LIVE_REFRESH,
     refresh_battery=EINK_REFRESH,
+    # The orange blob, 96 px, from tools/make_buddy_art.py.
+    buddy=Buddy("/system/apps/claude_buddy/buddy_art/tufty_{}.png", 96),
 )
 
 PROFILES = {"badger": BADGER, "tufty": TUFTY}

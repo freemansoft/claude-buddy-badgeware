@@ -26,6 +26,7 @@ breaks at that rate.
 | Page turns refresh only on a button press                                                         | Paging must not become an animation                                               | `Painter.turn`                                              | `test_page_turn_repaints_without_throttle`, `test_status_update_keeps_page`                 |
 | `NON_BLOCKING` mode                                                                               | The loop keeps serving buttons and BLE during a refresh                           | `__init__.py` `badge.mode(...)`                             | No test                                                                                     |
 | Nothing animates                                                                                  | Any animation on e-ink is a refresh per frame                                     | `buddy_view.py`                                             | No test                                                                                     |
+| The buddy's state (`S_MOOD`) is a passenger that follows key fields                               | A new picture must never repaint on its own                                       | `buddy_model.py` `buddy_mood`                               | `test_mood_never_changes_without_the_key`                                                   |
 
 ## CPU, sensors and storage
 

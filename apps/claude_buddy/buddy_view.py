@@ -35,6 +35,7 @@ from buddy_model import (
     S_BATTERY,
     S_TOKENS,
     S_LINES,
+    S_MOOD,
     S_NAME,
     S_STATUS,
     S_TITLE,
@@ -70,6 +71,9 @@ _SHORT_LABELS = ((" running", " run"), (" waiting", " wait"))
 # 188 px in nope on the Badger, 191 of about 210 px in 18 px MonaSans
 # on the Tufty).
 APP_ONLY_NOTE = "Answer in the Claude App"
+# Space between the text and the buddy picture, on badges that have one
+# (the profile's buddy; the Tufty).
+BUDDY_GAP = 6
 
 # Unicode punctuation Claude commonly sends, mapped to ASCII the ROM
 # pixel fonts can draw. Anything else above Latin-1 becomes "?".
@@ -223,6 +227,20 @@ class BuddyView:
             self.top_rule + 1 + inset_y,
             self.bottom_rule - inset_y,
         )
+        # The buddy (profile.buddy, None on the Badger) takes a column
+        # on the right of the body on connected screens; the title and
+        # text wrap in the space left. The bottom row (counts, tokens,
+        # page marker) keeps the full width, under the picture.
+        self.buddy = profile.buddy
+        self.buddy_area = None
+        if self.buddy is not None:
+            self.buddy_area = (
+                self.body_x,
+                self.body_w - self.buddy.size - BUDDY_GAP,
+                self.body_top,
+                self.body_bottom,
+            )
+        self._art = (None, None)  # (mood, picture): only the one on screen
         self._layout_key = None
         self._layout_value = None
 
@@ -318,12 +336,45 @@ class BuddyView:
         area = self._area(scr)
         if area is self.framed_area:
             self._draw_frame()
-        self._draw_body(scr[S_TITLE], scr[S_LINES], scr[S_TOKENS], page, area)
+        bottom_area = self.plain_area if area is self.buddy_area else area
+        self._draw_body(scr[S_TITLE], scr[S_LINES], scr[S_TOKENS], page, area, bottom_area)
+        if area is self.buddy_area:
+            self._draw_buddy(scr[S_MOOD])
         self._draw_footer(scr[S_ACTIONABLE], scr[S_KIND])
 
     def _area(self, scr):
-        """The content area for ``scr``: framed when not connected."""
-        return self.framed_area if scr[S_KIND] == KIND_PAIR else self.plain_area
+        """The content area for ``scr``: framed when not connected,
+        narrowed for the buddy when the badge has one and the screen
+        shows it, plain otherwise."""
+        if scr[S_KIND] == KIND_PAIR:
+            return self.framed_area
+        if self.buddy is not None and scr[S_MOOD] is not None:
+            return self.buddy_area
+        return self.plain_area
+
+    def _picture(self, mood):
+        """The buddy picture for ``mood``, loaded when the mood changes.
+        Only one is kept: each takes about 37 KB of RAM decoded. None if
+        it can't be loaded (then the column stays empty)."""
+        if self._art[0] != mood:
+            try:
+                art = image.load(self.buddy.path.format(mood))
+            except Exception as e:  # noqa: BLE001
+                print("claude_buddy: buddy picture", mood, "not loaded:", e)
+                art = None
+            self._art = (mood, art)
+        return self._art[1]
+
+    def _draw_buddy(self, mood):
+        """The picture at the right of the body, centred in the height
+        above the bottom row."""
+        art = self._picture(mood)
+        if art is None:
+            return
+        size = self.buddy.size
+        x = self.body_x + self.body_w - size
+        top, bottom = self.body_top, self.body_bottom - self.h_body
+        screen.blit(art, vec2(x, top + max(0, (bottom - top - size) // 2)))
 
     def _draw_frame(self):
         """A FRAME_W-thick box inset from the dividers and screen
@@ -479,7 +530,7 @@ class BuddyView:
         character reply from scratch each time would not be."""
         return len(self._layout(scr[S_TITLE], scr[S_LINES], self._area(scr))[2])
 
-    def _draw_body(self, title, lines, tokens, page, area):
+    def _draw_body(self, title, lines, tokens, page, area, bottom_area=None):
         screen.pen = self.theme.fg
         title_lines, top, pages, counts = self._layout(title, lines, area)
         page = max(0, min(page, len(pages) - 1))
@@ -509,7 +560,7 @@ class BuddyView:
             y += self.h_body
 
         marker = "{}/{}".format(page + 1, len(pages)) if len(pages) > 1 else ""
-        self._draw_bottom_row(counts, tokens, marker, area)
+        self._draw_bottom_row(counts, tokens, marker, bottom_area or area)
 
     def _draw_bottom_row(self, counts, tokens, marker, area):
         """Counts (and today's tokens) on the left, page marker on the

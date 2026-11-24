@@ -5,10 +5,10 @@ still picture per state. Anthropic's reference device shows an
 animated pet; this is the badge's own take on that. **The Badger has
 no buddy** (see [Not on the Badger](#not-on-the-badger)).
 
-**Status:** the pictures are drawn and can be viewed on a Tufty with a
-gallery tool, but the app doesn't show them yet: nothing on its
-screens has changed. Viewed on a Tufty 2350 on 2026-11-23 (see
-[Results](#results)).
+**Status:** the app shows the buddy on the Tufty's connected screens
+(see [In the app](#in-the-app)). The pictures were checked on a Tufty
+2350 with the gallery tool on 2026-11-23 (see [Results](#results));
+the app with the buddy hasn't been run on a Tufty yet.
 
 ## The character
 
@@ -111,12 +111,16 @@ What was learned:
 
 The work is in closed pull request #19.
 
-## Next: showing the buddy in the app
+## In the app
 
-Planned, not built, and on the Tufty only (a profile setting, so the
-Badger's profile has none). The buddy would sit on the right of the
-body on connected screens, its state taken from what the screen
-already shows, so it adds no repaints of its own:
+On the Tufty only: its profile (`buddy_profile.TUFTY.buddy`) names the
+pictures and their size, and the Badger's profile has none, so the
+Badger's screens are drawn exactly as before. The buddy sits on the
+right of the body on connected screens, centred above the bottom row;
+the title and text wrap in the space left of it, and the bottom row
+(counts, tokens, page marker) keeps the full width. Its state comes
+from what the screen already shows (`BuddyModel.buddy_mood`), so it
+adds no repaints of its own:
 
 | Screen                                    | State     |
 | ----------------------------------------- | --------- |
@@ -128,7 +132,9 @@ already shows, so it adds no repaints of its own:
 | Answered: denied                          | idle      |
 | Pair with Claude / Disconnected (framed)  | no buddy  |
 
-Busy starts at 1 running session, because the title already changes
-from "Idle" to "Working" there and the counts are part of the screen's
-change key. Text beside the buddy wraps in the narrower space left.
-Nothing animates.
+Busy starts at 1 running session, not upstream's 3, because the
+title already changes from "Idle" to "Working" there and the counts
+are part of the screen's change key. The state rides at the end of
+the screen tuple (`S_MOOD`) as a passenger; a test checks it never
+changes while the key stays the same. Only the picture on screen is
+loaded (about 37 KB of RAM), when the state changes. Nothing animates.
